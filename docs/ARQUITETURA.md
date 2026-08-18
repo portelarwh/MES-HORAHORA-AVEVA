@@ -4,55 +4,72 @@
 
 ```
 .
-├── src/                      aplicação — é isto que o GitHub Pages publica
-│   ├── index.html            marcação e ordem de carregamento
-│   ├── css/                  folhas numeradas, aplicadas em cascata
-│   └── js/                   módulos numerados, carregados em ordem
+├── src/                        aplicação — é isto que o GitHub Pages publica
+│   ├── index.html              marcação e ordem de carregamento
+│   ├── css/                    folhas numeradas, aplicadas em cascata
+│   └── js/                     módulos numerados, carregados em ordem
 ├── dist/
-│   └── mes-horahora.html     build de arquivo único, para uso offline
+│   └── mes-horahora.html       build de arquivo único, para uso offline
 ├── tools/
-│   ├── build.mjs             embute CSS e JS no arquivo único
-│   └── check.mjs             sintaxe e referências
-├── docs/                     documentação
-├── samples/                  CSV de exemplo sintético
-└── .github/workflows/        verificação e publicação
+│   ├── build.mjs               embute CSS e JS no arquivo único
+│   └── check.mjs               sintaxe, referências, ids únicos e handlers
+├── tests/                      testes automatizados (node --test, sem dependências)
+├── docs/                       documentação
+├── samples/                    CSV de exemplo sintético
+└── .github/workflows/          verificação e publicação
 ```
 
 ## Por que scripts clássicos e não módulos ES
 
-Módulos ES são carregados sob regras de CORS, e navegadores bloqueiam CORS em `file://`. Um
-`index.html` com `type="module"` funciona no Pages e falha no duplo clique.
+Módulos ES são carregados sob regras de CORS, e navegadores bloqueiam CORS em
+`file://`. Um `index.html` com `type="module"` funciona no Pages e falha no duplo
+clique.
 
-Como parte do uso previsto é abrir o arquivo direto no computador da fábrica, sem servidor e às
-vezes sem rede liberada, os arquivos são scripts clássicos com escopo global compartilhado. O
-prefixo numérico define a ordem de carregamento, que é dependência real: `00-core.js` declara o
-estado que todos os outros usam.
+Como parte do uso previsto é abrir o arquivo direto no computador da fábrica, sem
+servidor e às vezes sem rede liberada, os arquivos são scripts clássicos com
+escopo global compartilhado. O prefixo numérico define a ordem de carregamento,
+que é dependência real.
 
-O `dist/` resolve o mesmo problema por outro caminho, entregando tudo num arquivo só.
+O `dist/` resolve o mesmo problema por outro caminho, entregando tudo num arquivo
+só. Os testes resolvem pelo terceiro: `tests/harness.mjs` concatena os módulos
+puros na mesma ordem do `index.html` e os avalia num contexto de `node:vm`, o que
+permite testar as fórmulas sem converter o projeto para módulos ES.
 
-## Ordem de carregamento
+## Ordem de carregamento e responsabilidades
 
-| Arquivo | Responsabilidade |
-| --- | --- |
-| `00-core.js` | Estado global, utilitários de formatação, tema, navegação entre abas |
-| `10-db.js` | IndexedDB e normalização de cadastros antigos |
-| `20-csv.js` | Separador, número, formato de data |
-| `30-import.js` | Importação, escolha de máquina, mesclagem por dia |
-| `40-metrics.js` | Motor de métricas e recortes de período |
-| `50-render.js` | Cartões, tabelas, diagnóstico |
-| `60-charts.js` | Gráfico de produção e faixa de cadência |
-| `70-reports.js` | A4, WhatsApp, e-mail |
-| `80-maquinas.js` a `83-dados.js` | Telas de cadastro e base |
-| `90-montagem.js` | Ligação dos controles e exportação em CSV |
-| `99-boot.js` | Abertura do banco e primeira renderização |
+| Arquivo | Responsabilidade | DOM |
+| --- | --- | --- |
+| `00-core.js` | estado global, helpers de DOM, tema, abas, proteção contra erro isolado | sim |
+| `01-format.js` | números, datas, durações, percentuais e a política de “não calculável” | não |
+| `02-config.js` | preferências do usuário, catálogo de cartões, seções e bases | não |
+| `10-db.js` | IndexedDB, leitura por faixa de chave, normalização de cadastros antigos | sim |
+| `20-csv.js` | separador, número, formato de data | não |
+| `30-import.js` | importação, escolha de máquina, mesclagem por dia | sim |
+| `40-metrics.js` | **motor de cálculo**: série, classes de intervalo, tempos, OEE, turnos, buckets | não |
+| `41-quality.js` | qualidade dos dados e painel de validação | não |
+| `45-analise.js` | janela exata, filtros rápidos, orquestração, limpar relatório, atualização automática | sim |
+| `50-render.js` | cartões, fechamento por turno, qualidade, validação, diagnóstico, rastreabilidade | sim |
+| `51-registros.js` | detalhe por hora com expansão e lista de registros individuais | sim |
+| `60-charts.js` | gráfico de produção e faixa de cadência | sim |
+| `70-reports.js` | A4, WhatsApp, e-mail | sim |
+| `75-export.js` | exportações em CSV | sim |
+| `80-maquinas.js` a `83-dados.js` | telas de cadastro, lançamentos e base | sim |
+| `90-montagem.js` | ligação dos controles e seletor de cartões | sim |
+| `99-boot.js` | preferências, abertura do banco e primeira renderização | sim |
 
-A navegação entre abas é ligada em `00-core.js`, antes da abertura do banco. Se o IndexedDB falhar
-— janela anônima, política de privacidade do navegador —, a interface continua respondendo e o
-usuário vê um aviso, em vez de uma tela inerte.
+Os módulos marcados com **não** na coluna DOM são puros e é o que os testes
+carregam. Regra do projeto: fórmula nova entra num módulo puro; tela nenhuma
+refaz conta.
+
+A navegação entre abas é ligada em `00-core.js`, antes da abertura do banco. Se o
+IndexedDB falhar — janela anônima, política de privacidade —, a interface continua
+respondendo e o usuário vê um aviso, em vez de uma tela inerte. Cada bloco de
+render passa por `protegido()`, então um dado inválido derruba uma seção e não a
+página.
 
 ## Modelo de dados
 
-Quatro coleções no IndexedDB, banco `monitor-hh`:
+Quatro coleções no IndexedDB, banco `monitor-hh`, **versão 1**:
 
 ```js
 maquinas  { id, nome, etapa, modo, porInc, unid, cap, meta, offset, cor, obs }
@@ -61,46 +78,90 @@ ajustes   { id, maquinaId, data, tipo, inicio, minutos, qtd, un, obs }
 dias      { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, pts: [[ms, valor], ...] }
 ```
 
-`dias` guarda um dia inteiro por registro em vez de um registro por ponto. Um turno rende algumas
-centenas de pontos; gravá-los individualmente multiplicaria por centenas o custo de leitura de
-qualquer análise que atravesse semanas.
+A versão do banco **não mudou** nesta revisão: nenhum store novo, nenhum keyPath
+alterado. Base e backup criados por versões anteriores continuam sendo lidos sem
+conversão.
 
-`ajustes.maquinaId` aceita `"*"` para lançamentos que valem para todas as máquinas.
+`dias` guarda um dia inteiro por registro em vez de um registro por ponto. Um
+turno rende algumas centenas de pontos; gravá-los individualmente multiplicaria o
+custo de leitura de qualquer análise que atravesse semanas.
+
+Como a chave é `maquinaId|data`, um intervalo de datas de uma máquina é um range
+contíguo da chave primária. `diasDoIntervalo()` usa `IDBKeyRange` e lê só o
+necessário, em vez de trazer a base inteira para a memória.
+
+`ajustes.maquinaId` aceita `"*"` para lançamentos que valem para todas as
+máquinas.
+
+### Preferências
+
+Ficam no `localStorage`, separadas dos dados de produção:
+
+| Chave | Conteúdo |
+| --- | --- |
+| `hh-tema` | claro ou escuro |
+| `hh-prefs` | cartões, seções, base de cálculo, limiares, horários, turno desconsiderado, atualização automática |
+
+Apagar a base de produção não mexe nas preferências; trocar de preferência não
+mexe na base. O backup exporta as duas coisas, em campos distintos.
 
 ## Fluxo de uma análise
 
 ```
-seleção de período e máquinas
+janela exata (data + horário) e máquinas selecionadas
         ↓
-carregarPontos()      lê os dias do IndexedDB
+diasDoIntervalo()     lê do IndexedDB só a faixa necessária
         ↓
-analisarMaquina()     eventos, janelas de cobertura, paradas, percentis de ciclo
+analisarMaquina()     série contínua, classes de intervalo, cobertura,
+                      paradas, lacunas, eventos, percentis de ciclo
         ↓
-bucketsDe()           recortes por hora, turno ou dia; aplica a regra de borda
+bucketsDe() / turnosNoIntervalo()
+                      recortes de hora, dia e turno, sempre dentro da janela
         ↓
-metricas()            para cada recorte: tempo, produção, OEE, atingimento, cadência
+metricas(A, a, b)     para cada recorte: tempos, produção, OEE por base,
+                      meta proporcional, cadência
         ↓
-renderAnalise()       cartões, tabelas e diagnóstico
+qualidade() / validacoes()
+        ↓
+renderAnalise()       cartões, tabelas, painéis, diagnóstico, rastreabilidade
         ↓
 desenhar()            canvas, no requestAnimationFrame seguinte
 ```
 
-`metricas(A, a, b)` é o núcleo e recebe apenas um intervalo. Cartões, linhas de tabela,
-fechamento de turno e totais chamam a mesma função com recortes diferentes — o total do período
-é a mesma conta aplicada ao intervalo inteiro, não a soma das linhas. É o que garante que a
-tabela e o cartão nunca discordem.
+`metricas(A, a, b)` é o núcleo e recebe apenas um intervalo. Cartões, linhas de
+tabela, fechamento de turno e totais chamam a mesma função com recortes
+diferentes — o total do período é a mesma conta aplicada ao intervalo inteiro,
+não a soma das linhas. É o que garante que a tabela e o cartão nunca discordem.
+
+## Volume
+
+Períodos longos não montam a tabela inteira de uma vez: o detalhe por hora e a
+lista de registros individuais são renderizados em blocos de 200 linhas, com
+botão para carregar o restante. A leitura do banco já vem limitada à faixa de
+datas da janela.
 
 ## Canvas
 
-Os dois gráficos são desenhados à mão em canvas, sem biblioteca. A razão é a mesma do arquivo
-único: nada de CDN, que rede corporativa costuma bloquear.
+Os dois gráficos são desenhados à mão em canvas, sem biblioteca. A razão é a mesma
+do arquivo único: nada de CDN, que rede corporativa costuma bloquear.
 
 Dois cuidados que já causaram defeito e estão fixados:
 
-- O desenho acontece depois que o container está visível. Medir a largura de um elemento dentro
-  de um bloco com `display:none` devolve zero, e o gráfico sai em branco sem erro no console.
-- O canvas é dimensionado por `devicePixelRatio` e redesenhado na troca de tema e no
-  redimensionamento da janela, com debounce.
+- O desenho acontece depois que o container está visível. Medir a largura de um
+  elemento dentro de um bloco com `display:none` devolve zero, e o gráfico sai em
+  branco sem erro no console.
+- O canvas é dimensionado por `devicePixelRatio` e redesenhado na troca de tema e
+  no redimensionamento da janela, com debounce.
 
-O eixo da faixa de cadência é comprimido: trechos sem cobertura de dados viram um divisor
-tracejado, em vez de esticar o eixo por dias vazios.
+Na faixa de cadência, parada e ausência de dados têm marcações diferentes: bloco
+vermelho para parada detectada, hachura cinza para ausência de dados. O eixo é
+comprimido nos trechos com cobertura, para que dias vazios não estiquem o
+gráfico.
+
+## Armadilha de HTML que já custou caro
+
+`elemento.innerHTML = '<thead>...'` só funciona se o elemento for uma `<table>`.
+Injetar `<thead>`/`<tbody>` dentro de uma `<div>` faz o parser descartar as tags e
+sobrar o texto solto — as células aparecem concatenadas. Toda tabela montada por
+string precisa ser envolvida em `<table>` ou escrita dentro de um elemento
+`table` já existente.
