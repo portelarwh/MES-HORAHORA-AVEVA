@@ -8,6 +8,7 @@ const semTags=s=>String(s).replace(/<[^>]+>/g,'');
 const corOEE=r=>r==null?'#8593A5':r>=.85?'#1B8A5A':r>=.7?'#B27300':'#C33C4E';
 const RODAPE_FORMULAS=()=>'OEE = peças ÷ (capacidade × base ÷ 60). Meta proporcional = meta × base ÷ 60. '
   +'Base desta emissão: '+rotuloBase(LAST.base)+' — '+descBase(LAST.base)+'. '
+  +'Contagem: '+rotuloContagem(LAST.contagem)+'. '
   +'Tempo sem dados é ausência de registro e não é contado como parada.';
 
 function relatorioA4(){
@@ -160,13 +161,15 @@ function textoEmail(){
   let b=`Assunto: ${assunto}\n\nPrezados,\n\nSegue o fechamento de produção de ${periodoTxt()}, `
     +`apurado a partir do contador do historian.\n\n`;
   b+=`JANELA E CRITÉRIO\nPeríodo: ${periodoTxt()}\nBase de cálculo: ${rotuloBase(LAST.base)} — ${descBase(LAST.base)}\n`;
-  b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n\n`;
+  b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n`;
+  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n\n`;
   b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${fmtPct(oee)}\n`;
   b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${pct(sum.pcs,sum.meta)}\n\n`;
   for(const A of AS){
     const x=A.tot,c=A.maq;
     b+=`${c.nome.toUpperCase()}\n`;
     b+=`- Produção: ${nf(x.pcs)} peças (${nf(x.inc)} ${c.unid}s, ${nf(A.pc)} peças cada)\n`;
+    if(x.incAposLacuna>0)b+=`- Data incerta: ${nf(x.incAposLacuna)} incrementos registrados logo após uma lacuna, contados no carimbo em que apareceram\n`;
     if(x.naoAtrib>0)b+=`- Não atribuído: ${nf(x.naoAtrib)} incrementos vindos após lacuna ou borda, fora da contagem\n`;
     b+=`- Primeira marcação: ${x.primeiroReg==null?NAO_CALC:dtBR(x.primeiroReg)}\n`;
     b+=`- Última marcação: ${x.ultimoReg==null?NAO_CALC:dtBR(x.ultimoReg)}\n`;

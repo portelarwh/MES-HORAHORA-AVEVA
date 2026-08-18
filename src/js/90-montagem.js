@@ -57,6 +57,8 @@ function dialogoCards(){
 function montarBases(){
   $('a_base').innerHTML=BASES.map(([k,r,d])=>
     `<option value="${k}" title="${esc(d)}">${esc(r)}</option>`).join('');
+  $('a_contagem').innerHTML=CONTAGENS.map(([k,r,d])=>
+    `<option value="${k}" title="${esc(d)}">${esc(r)}</option>`).join('');
 }
 function aplicarPrefsNaTela(){
   montarBases();
@@ -64,15 +66,20 @@ function aplicarPrefsNaTela(){
   $('a_gran').value=PREFS.gran;$('a_tipo').value=PREFS.tipo;$('a_base').value=PREFS.base;
   $('a_lim').value=PREFS.limParada;$('a_limsd').value=PREFS.limSemDados;
   $('a_autoseg').value=PREFS.autoSeg;
-  $('a_basehelp').textContent=descBase(PREFS.base);
+  $('a_contagem').value=PREFS.contagem;
+  ajudaCalculo();
 }
 
 /* --- ligações ------------------------------------------------------------ */
 $('a_go').addEventListener('click',()=>rodarAnalise());
 $('a_cards').addEventListener('click',dialogoCards);
 $('a_limpar').addEventListener('click',limparRelatorio);
-$('a_base').addEventListener('change',()=>{$('a_basehelp').textContent=descBase($('a_base').value)});
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base']
+const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
+  '<b>Base:</b> '+esc(descBase($('a_base').value))
+  +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
+$('a_base').addEventListener('change',ajudaCalculo);
+$('a_contagem').addEventListener('change',ajudaCalculo);
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));

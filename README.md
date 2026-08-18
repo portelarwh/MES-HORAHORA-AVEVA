@@ -33,6 +33,7 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Meta proporcional | A meta acompanha a base escolhida. Por padrão a base vai da primeira à última marcação do contador — a linha começa a produzir quando a primeira caixa é contada, não quando o relógio do filtro vira. |
 | OEE em cinco leituras | Entre marcações (padrão), programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
 | Contador de próxima unidade | A leitura do historian indica a **próxima** caixa: leitura 21 com contagem iniciando em 1 são 20 caixas prontas. O cartão “Contagem do contador” mostra as leituras para conferência contra o painel da máquina. |
+| Contagem sem perda | A primeira marcação é só a referência; da segunda em diante todo delta conta, no carimbo em que foi registrado. A soma dos deltas fecha com a diferença das leituras. Incrementos vindos depois de uma lacuna são contados e marcados como *data incerta*. |
 | Turno de limpeza | O turno desconsiderado entrega sua produção ao turno seguinte sem entregar as horas: quem recebe as caixas adiantadas conta a produção e continua medido pelo próprio horário cadastrado. |
 | Parada ≠ ausência de dados | Dois limiares separam “a máquina parou” de “o historian não gravou”. Falta de dado nunca vira parada. |
 | Qualidade dos dados | Cobertura, resets, deltas maiores que 1, registros sem alteração, carimbos repetidos ou fora de ordem, produção não atribuída — com classificação e painel de validação. |
@@ -117,6 +118,23 @@ Cadastrados por horário de início e fim, aceitam virada de meia-noite. As
 ocorrências são geradas dia a dia, recortadas na janela selecionada e garantidas
 sem sobreposição — nenhum registro entra em dois turnos. Cada linha traz o status:
 fechado, em andamento, ainda não começou, recortado pelo filtro ou sem dados.
+
+### A primeira marcação é referência, não produção
+
+A primeira marcação de um período não tem delta próprio: ela é o ponto de
+partida. A contagem começa na **segunda marcação** e, daí em diante, **todo
+delta conta**, no carimbo em que o historian o registrou.
+
+Isso vale mesmo quando a marcação de referência está fora da janela. Puxando o
+dia 17/08, a última marcação de 16/08 serve de referência e o incremento
+registrado no dia 17 pertence ao dia 17.
+
+Quando o incremento vem logo depois de uma lacuna de dados, ou do registro
+anterior à janela, a **quantidade** é certa mas o **instante** é incerto. Ele é
+contado assim mesmo e fica marcado como *data incerta* no painel de qualidade e
+na lista de registros. O seletor **“Contagem dos incrementos”** permite trocar
+para o modo estrito, em que esses incrementos ficam fora da produção e são
+reportados como *não atribuídos*.
 
 ### O contador indica a próxima caixa
 

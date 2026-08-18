@@ -80,8 +80,10 @@ function analisarMaquina(maq,dias,opts){
   const limSemDadosS=Math.max(limParadaS/60,opts.limSemDadosMin||0)*60;
   const S=serieDePontos(dias),pts=S.pts,pc=pecas(maq);
 
+  const contarTudo=opts.contagem!=='semLacuna';
   const eventos=[],paradas=[],lacunas=[],cobertura=[];
   let resets=0,semAlteracao=0,deltasMaiores=0,naoAtribuido=0,eventosNaoAtrib=0;
+  let incAposLacuna=0,incBorda=0;
 
   for(let i=1;i<pts.length;i++){
     const t0=pts[i-1][0],t=pts[i][0],gapS=(t-t0)/1000;
@@ -95,13 +97,23 @@ function analisarMaquina(maq,dias,opts){
     if(delta<0){reset=true;resets++;delta=Math.max(0,pts[i][1]-(maq.offset||0))}
     if(delta===0)semAlteracao++;
     if(delta>1)deltasMaiores++;
-    /* Um incremento só é atribuído ao período quando é possível dizer que ele
-       aconteceu dentro dele: intervalo com dados e começando dentro da janela
-       (ou curto o bastante para a borda ser irrelevante). O resto é reportado
-       como produção não atribuída, nunca espalhado em horários inventados. */
-    const contabiliza=classe!==SEMDADOS&&(t0>=ini||classe===NORMAL);
-    if(!contabiliza&&delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
-    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,
+    /* A primeira marcação da janela não tem incremento próprio: ela é a
+       referência. A partir da segunda, todo delta conta, sempre no carimbo em
+       que o historian o registrou — nenhum horário é inventado para distribuí-lo.
+
+       Dois casos ficam com a DATA incerta, e são marcados para o painel de
+       qualidade sem deixarem de ser contados:
+         aposLacuna — o intervalo anterior é ausência de dados;
+         naBorda    — o registro anterior está fora da janela analisada.
+       O modo 'semLacuna' os exclui da contagem, para quem prefere não somar
+       produção que não consegue localizar no tempo. */
+    const aposLacuna=classe===SEMDADOS,naBorda=t0<ini;
+    const contabiliza=contarTudo||(!aposLacuna&&(!naBorda||classe===NORMAL));
+    if(contabiliza){
+      if(aposLacuna&&delta>0)incAposLacuna+=delta;
+      if(naBorda&&delta>0)incBorda+=delta;
+    }else if(delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
+    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,aposLacuna,naBorda,
       pecas:contabiliza?delta*pc:0});
   }
 
@@ -126,6 +138,7 @@ function analisarMaquina(maq,dias,opts){
     paradas:par.sort((a,b)=>b.min-a.min),
     origem:{duplicados:S.duplicados,foraDeOrdem:S.foraDeOrdem,frac:S.frac},
     resets,semAlteracao,deltasMaiores,naoAtribuido,eventosNaoAtrib,
+    incAposLacuna,incBorda,contagem:contarTudo?'tudo':'semLacuna',
     tcP10:q(.10),tcMed:q(.50),
     primeiro:dentro.length?dentro[0][0]:null,
     ultimo:dentro.length?dentro[dentro.length-1][0]:null,
@@ -178,11 +191,16 @@ function metricas(A,a,b,prod){
   const c=A.maq,pc=A.pc;
   const pa=prod&&prod.a!=null?prod.a:a, pb=prod&&prod.b!=null?prod.b:b;
   let inc=0,incAbsorvido=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
+  let incAposLacuna=0,incBorda=0;
   let ultimoReg=null,primeiroReg=null,leituraIni=null,leituraFim=null;
   for(const e of A.eventos){
     if(e.t<pa||e.t>=pb)continue;
-    if(e.contabiliza){inc+=e.delta;if(e.t<a)incAbsorvido+=e.delta}
-    else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.contabiliza){
+      inc+=e.delta;
+      if(e.t<a)incAbsorvido+=e.delta;
+      if(e.aposLacuna)incAposLacuna+=e.delta;
+      if(e.naBorda)incBorda+=e.delta;
+    }else if(e.delta>0)naoAtrib+=e.delta;
     if(e.delta===0)semAlt++;
     if(e.reset)resets++;
   }
@@ -235,7 +253,7 @@ function metricas(A,a,b,prod){
   }
   const base=tempos[A.base]!==undefined?A.base:'marcacoes';
   return{a,b,pa,pb,dur,inc,incAbsorvido,pcsAbsorvido:incAbsorvido*pc,
-    regs,naoAtrib,semAlt,resets,nPar,nLac,
+    regs,naoAtrib,incAposLacuna,incBorda,semAlt,resets,nPar,nLac,
     leituraIni,leituraFim,contagemInicial:c.offset||0,
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,

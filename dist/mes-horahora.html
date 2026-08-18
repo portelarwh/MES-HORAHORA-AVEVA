@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v4.1.0 · build 2026-08-18 -->
+  <!-- MES Hora a Hora — AVEVA · v4.2.0 · build 2026-08-18 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -340,6 +340,8 @@ table.sub tbody tr:last-child td{border-bottom:0}
         <div class="fld"><label for="a_limsd">Sem dados acima de (min)</label><input type="number" id="a_limsd" value="30" min="1" step="1"></div>
         <div class="fld" style="min-width:270px"><label for="a_borda">Turno desconsiderado</label>
           <select id="a_borda"></select></div>
+        <div class="fld" style="min-width:300px"><label for="a_contagem">Contagem dos incrementos</label>
+          <select id="a_contagem"></select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
 
@@ -583,6 +585,9 @@ function hDur(min){
 }
 const fmtMin=m=>finito(m)?nf1(m)+' min':NAO_CALC;
 const fmtSeg=s=>finito(s)?nf1(s)+' s':NAO_CALC;
+/* Intervalo entre registros: segundos são legíveis até uma hora; acima disso a
+   lacuna noturna vira "52.324,2 s" e ninguém lê. */
+const fmtIntervalo=s=>!finito(s)?NAO_CALC:s>=3600?hDur(s/60):fmtSeg(s);
 
 /* --- razões e percentuais ----------------------------------------------- */
 /* Devolve null — e não 0 — quando a conta não pode ser feita. */
@@ -601,7 +606,7 @@ const cl=a=>a==null||!finito(a)?'n':a>=1?'g':a>=.85?'w':'r';
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
   NAO_CALC,finito,nf,nf1,nf2,pad2,pad3,hhmm,hhmmss,iso,brDate,ddmm,dtBR,dtCurto,
-  hm,mh,hDur,fmtMin,fmtSeg,razao,fmtPct,pct,fmtVal,cl};
+  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl};
 
 /* === 02-config.js === */
 /* 02-config.js — Preferências do usuário e catálogo do que pode ser exibido.
@@ -659,6 +664,17 @@ const BASES=[
   ['operacional','Tempo rodando','tempo com dados menos abono e menos paradas'],
   ['parcial','Até o último registro','do início do período até a última marcação, menos abono']
 ];
+/* Como tratar o incremento cuja data é incerta: o que vem depois de uma lacuna
+   de dados e o que vem do registro anterior à janela. A primeira marcação nunca
+   tem incremento próprio — ela é a referência, e a contagem começa na segunda. */
+const CONTAGENS=[
+  ['tudo','Todo incremento conta, a partir da segunda marcação',
+   'a primeira marcação é só a referência; do segundo registro em diante todo delta entra na produção, no carimbo em que foi registrado'],
+  ['semLacuna','Não contar incrementos vindos depois de uma lacuna',
+   'incrementos que aparecem depois de ausência de dados, ou vindos do registro anterior à janela, ficam fora da produção e são reportados como não atribuídos']
+];
+const rotuloContagem=k=>(CONTAGENS.find(x=>x[0]===k)||CONTAGENS[0])[1];
+const descContagem=k=>(CONTAGENS.find(x=>x[0]===k)||CONTAGENS[0])[2];
 const rotuloBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[1];
 const descBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[2];
 
@@ -667,7 +683,7 @@ function prefsPadrao(){
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
   return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
-    limParada:3,limSemDados:30,borda:'todos',auto:false,autoSeg:120,
+    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',auto:false,autoSeg:120,
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
 
@@ -684,6 +700,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.cards))if(!CARDS.some(c=>c[0]===k))delete out.cards[k];
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
+  if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
@@ -703,7 +720,8 @@ const cardAtivo=k=>PREFS.cards[k]!==false;
 const secaoAtiva=k=>PREFS.secoes[k]!==false;
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
-  CARDS,OPCOES,BASES,prefsPadrao,mesclaPrefs,rotuloBase,descBase};
+  CARDS,OPCOES,BASES,CONTAGENS,prefsPadrao,mesclaPrefs,
+  rotuloBase,descBase,rotuloContagem,descContagem};
 
 /* === 10-db.js === */
 /* 10-db.js — Camada IndexedDB e normalização dos registros de máquina.
@@ -950,8 +968,10 @@ function analisarMaquina(maq,dias,opts){
   const limSemDadosS=Math.max(limParadaS/60,opts.limSemDadosMin||0)*60;
   const S=serieDePontos(dias),pts=S.pts,pc=pecas(maq);
 
+  const contarTudo=opts.contagem!=='semLacuna';
   const eventos=[],paradas=[],lacunas=[],cobertura=[];
   let resets=0,semAlteracao=0,deltasMaiores=0,naoAtribuido=0,eventosNaoAtrib=0;
+  let incAposLacuna=0,incBorda=0;
 
   for(let i=1;i<pts.length;i++){
     const t0=pts[i-1][0],t=pts[i][0],gapS=(t-t0)/1000;
@@ -965,13 +985,23 @@ function analisarMaquina(maq,dias,opts){
     if(delta<0){reset=true;resets++;delta=Math.max(0,pts[i][1]-(maq.offset||0))}
     if(delta===0)semAlteracao++;
     if(delta>1)deltasMaiores++;
-    /* Um incremento só é atribuído ao período quando é possível dizer que ele
-       aconteceu dentro dele: intervalo com dados e começando dentro da janela
-       (ou curto o bastante para a borda ser irrelevante). O resto é reportado
-       como produção não atribuída, nunca espalhado em horários inventados. */
-    const contabiliza=classe!==SEMDADOS&&(t0>=ini||classe===NORMAL);
-    if(!contabiliza&&delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
-    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,
+    /* A primeira marcação da janela não tem incremento próprio: ela é a
+       referência. A partir da segunda, todo delta conta, sempre no carimbo em
+       que o historian o registrou — nenhum horário é inventado para distribuí-lo.
+
+       Dois casos ficam com a DATA incerta, e são marcados para o painel de
+       qualidade sem deixarem de ser contados:
+         aposLacuna — o intervalo anterior é ausência de dados;
+         naBorda    — o registro anterior está fora da janela analisada.
+       O modo 'semLacuna' os exclui da contagem, para quem prefere não somar
+       produção que não consegue localizar no tempo. */
+    const aposLacuna=classe===SEMDADOS,naBorda=t0<ini;
+    const contabiliza=contarTudo||(!aposLacuna&&(!naBorda||classe===NORMAL));
+    if(contabiliza){
+      if(aposLacuna&&delta>0)incAposLacuna+=delta;
+      if(naBorda&&delta>0)incBorda+=delta;
+    }else if(delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
+    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,aposLacuna,naBorda,
       pecas:contabiliza?delta*pc:0});
   }
 
@@ -996,6 +1026,7 @@ function analisarMaquina(maq,dias,opts){
     paradas:par.sort((a,b)=>b.min-a.min),
     origem:{duplicados:S.duplicados,foraDeOrdem:S.foraDeOrdem,frac:S.frac},
     resets,semAlteracao,deltasMaiores,naoAtribuido,eventosNaoAtrib,
+    incAposLacuna,incBorda,contagem:contarTudo?'tudo':'semLacuna',
     tcP10:q(.10),tcMed:q(.50),
     primeiro:dentro.length?dentro[0][0]:null,
     ultimo:dentro.length?dentro[dentro.length-1][0]:null,
@@ -1048,11 +1079,16 @@ function metricas(A,a,b,prod){
   const c=A.maq,pc=A.pc;
   const pa=prod&&prod.a!=null?prod.a:a, pb=prod&&prod.b!=null?prod.b:b;
   let inc=0,incAbsorvido=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
+  let incAposLacuna=0,incBorda=0;
   let ultimoReg=null,primeiroReg=null,leituraIni=null,leituraFim=null;
   for(const e of A.eventos){
     if(e.t<pa||e.t>=pb)continue;
-    if(e.contabiliza){inc+=e.delta;if(e.t<a)incAbsorvido+=e.delta}
-    else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.contabiliza){
+      inc+=e.delta;
+      if(e.t<a)incAbsorvido+=e.delta;
+      if(e.aposLacuna)incAposLacuna+=e.delta;
+      if(e.naBorda)incBorda+=e.delta;
+    }else if(e.delta>0)naoAtrib+=e.delta;
     if(e.delta===0)semAlt++;
     if(e.reset)resets++;
   }
@@ -1105,7 +1141,7 @@ function metricas(A,a,b,prod){
   }
   const base=tempos[A.base]!==undefined?A.base:'marcacoes';
   return{a,b,pa,pb,dur,inc,incAbsorvido,pcsAbsorvido:incAbsorvido*pc,
-    regs,naoAtrib,semAlt,resets,nPar,nLac,
+    regs,naoAtrib,incAposLacuna,incBorda,semAlt,resets,nPar,nLac,
     leituraIni,leituraFim,contagemInicial:c.offset||0,
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
@@ -1220,7 +1256,7 @@ const QUAL_CLASSE={boa:'g',aceitavel:'w',ruim:'r',sem:'n'};
 
 function qualidade(A,t){
   const o=A.origem||{duplicados:0,foraDeOrdem:0,frac:0};
-  const graves=(o.frac>0?1:0)+(o.foraDeOrdem>0?1:0)+(t.naoAtrib>0?1:0);
+  const graves=(o.frac>0?1:0)+(o.foraDeOrdem>0?1:0)+(t.naoAtrib>0?1:0)+(t.incAposLacuna>0?1:0);
   const cob=t.cobertura;                 // null quando o período tem duração zero
   let classe;
   if(!t.regs)classe='sem';
@@ -1229,7 +1265,9 @@ function qualidade(A,t){
   else classe='ruim';
   return{classe,rotulo:QUAL_ROT[classe],cor:QUAL_CLASSE[classe],cobertura:cob,
     registros:t.regs,incrementos:t.inc,semAlteracao:t.semAlt,resets:t.resets,
-    naoAtribuido:t.naoAtrib,lacunas:t.nLac,minutosSemDados:t.semDados,
+    naoAtribuido:t.naoAtrib,dataIncerta:(t.incAposLacuna||0)+(t.incBorda||0),
+    aposLacuna:t.incAposLacuna||0,naBorda:t.incBorda||0,
+    lacunas:t.nLac,minutosSemDados:t.semDados,
     duplicados:o.duplicados,foraDeOrdem:o.foraDeOrdem,fracionados:o.frac,
     deltasMaiores:A.deltasMaiores||0};
 }
@@ -1252,8 +1290,18 @@ function validacoes(A,t,ctx){
 
   if(t.naoAtrib>0)
     add('aten','NAO-ATRIBUIDO',nf(t.naoAtrib)+' incrementos não atribuídos',
-      'Vieram depois de uma lacuna ou de uma borda do período, sem como afirmar em que momento foram produzidos. '
-      +'Ficaram fora da produção contada, em vez de serem lançados num horário inventado.');
+      'Vieram depois de uma lacuna ou do registro anterior à janela, sem como afirmar em que momento foram produzidos, '
+      +'e o modo de contagem escolhido os deixa fora da produção. Para somá-los, troque a contagem para '
+      +'“todo incremento conta, a partir da segunda marcação”.');
+  if(t.incAposLacuna>0)
+    add('aten','DATA-INCERTA',nf(t.incAposLacuna)+' incrementos com data incerta',
+      'Apareceram no primeiro registro depois de uma ausência de dados de '+hDur(t.semDados)+' no total. '
+      +'Estão contados na produção, no carimbo em que o historian os registrou, mas o instante real da produção '
+      +'está em algum ponto da lacuna.');
+  if(t.incBorda>0)
+    add('info','BORDA',nf(t.incBorda)+' incrementos vindos do registro anterior à janela',
+      'O primeiro registro do período trouxe um incremento acumulado desde a marcação anterior, que está fora da janela. '
+      +'Está contado aqui porque foi registrado aqui — a primeira marcação em si nunca conta como produção.');
 
   if(q.fracionados>0)
     add('crit','FRACIONADO',nf(q.fracionados)+' registros com valor quebrado',
@@ -1367,6 +1415,7 @@ function guardarFiltros(){
   PREFS.limParada=+$('a_lim').value||3;
   PREFS.limSemDados=+$('a_limsd').value||30;
   PREFS.borda=$('a_borda').value||'todos';
+  PREFS.contagem=$('a_contagem').value||'tudo';
   salvarPrefs();
 }
 
@@ -1414,7 +1463,7 @@ async function rodarAnalise(opts){
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
-      limSemDadosMin:limSD,ajustes:AJU,base}));
+      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem}));
   }
   if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
@@ -1440,7 +1489,7 @@ async function rodarAnalise(opts){
 
   const nova=assinaturaDe(AS),mudou=nova!==ASSINATURA;
   ASSINATURA=nova;
-  LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,
+  LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,contagem:PREFS.contagem,
     ini:J.ini,fim:J.fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
     geradoEm:new Date(),dadosMudaram:mudou};
   protegido('a análise',renderAnalise,()=>{$('a_out').innerHTML=
@@ -1502,6 +1551,7 @@ function cardsDe(A){
     producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
       eqInc
       +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
+      +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta, vindos depois de lacuna':'')
       +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
     /* O contador do historian indica a PRÓXIMA unidade: a leitura 21 significa
        20 caixas concluídas. Este cartão existe para o operador conferir isso
@@ -1633,14 +1683,15 @@ function tabelaTurnos(A){
 /* --- qualidade e validação ---------------------------------------------- */
 function painelQualidade(){
   let h='<thead><tr><th>Máquina</th><th>Classificação</th><th>Cobertura</th><th>Registros</th>'
-    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Não atribuído</th>'
+    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Data incerta</th><th>Não atribuído</th>'
     +'<th>Lacunas</th><th>Quebrados</th><th>Duplicados</th><th>Fora de ordem</th></tr></thead><tbody>';
   for(const A of LAST.AS){
     const q=A.qual;
     h+=`<tr><td><span class="swatch" style="background:${A.maq.cor};margin-right:7px"></span>${esc(A.maq.nome)}</td>`
       +`<td><span class="pill p-${q.cor==='n'?'w':q.cor}">${q.rotulo}</span></td>`
       +`<td>${fmtPct(q.cobertura)}</td><td>${nf(q.registros)}</td><td>${nf(q.semAlteracao)}</td>`
-      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td><td>${nf(q.naoAtribuido)}</td>`
+      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td>`
+      +`<td>${q.dataIncerta>0?nf(q.dataIncerta):'—'}</td><td>${q.naoAtribuido>0?nf(q.naoAtribuido):'—'}</td>`
       +`<td>${nf(q.lacunas)} · ${hDur(q.minutosSemDados)}</td>`
       +`<td>${nf(q.fracionados)}</td><td>${nf(q.duplicados)}</td><td>${nf(q.foraDeOrdem)}</td></tr>`;
   }
@@ -1668,6 +1719,9 @@ function rastreabilidade(A){
     ['Leitura do contador','a leitura indica a próxima unidade',
       fmtVal(t.leituraIni)+' → '+fmtVal(t.leituraFim)+' · inicia em '+nf(t.contagemInicial),
       nf(t.inc)+' concluídas'],
+    ['Incrementos contados','soma dos deltas a partir da segunda marcação',
+      nf(t.regs)+' registros'+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' fora da contagem':'')
+      +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta':''),nf(t.inc)],
     ['Período selecionado','fim − início',
       dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
     ['Tempo com dados','período − tempo sem dados',
@@ -1782,6 +1836,7 @@ function renderAnalise(){
   const s1=secao('Resumo do período',
     dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
     +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
+    +' · contagem: <b>'+esc(rotuloContagem(LAST.contagem))+'</b>'
     +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min');
   for(const A of AS){
     const c=A.maq,h=el('div');
@@ -1913,7 +1968,7 @@ function linhasRegistros(A,L){
     return `<tr><td>${dtBR(r.t)}</td><td>${nf(r.valor)}</td>`
       +`<td>${e?nf(e.delta):NAO_CALC}</td>`
       +`<td>${e?nf(e.contabiliza?e.delta*A.pc:0):NAO_CALC}</td>`
-      +`<td>${e?fmtSeg(e.gapS):NAO_CALC}</td>`
+      +`<td>${e?fmtIntervalo(e.gapS):NAO_CALC}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${tags}</td>`
       +`<td>${e?(e.contabiliza?'sim':'não'):'—'}</td></tr>`;
   }).join('');
@@ -2243,6 +2298,7 @@ const semTags=s=>String(s).replace(/<[^>]+>/g,'');
 const corOEE=r=>r==null?'#8593A5':r>=.85?'#1B8A5A':r>=.7?'#B27300':'#C33C4E';
 const RODAPE_FORMULAS=()=>'OEE = peças ÷ (capacidade × base ÷ 60). Meta proporcional = meta × base ÷ 60. '
   +'Base desta emissão: '+rotuloBase(LAST.base)+' — '+descBase(LAST.base)+'. '
+  +'Contagem: '+rotuloContagem(LAST.contagem)+'. '
   +'Tempo sem dados é ausência de registro e não é contado como parada.';
 
 function relatorioA4(){
@@ -2395,13 +2451,15 @@ function textoEmail(){
   let b=`Assunto: ${assunto}\n\nPrezados,\n\nSegue o fechamento de produção de ${periodoTxt()}, `
     +`apurado a partir do contador do historian.\n\n`;
   b+=`JANELA E CRITÉRIO\nPeríodo: ${periodoTxt()}\nBase de cálculo: ${rotuloBase(LAST.base)} — ${descBase(LAST.base)}\n`;
-  b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n\n`;
+  b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n`;
+  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n\n`;
   b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${fmtPct(oee)}\n`;
   b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${pct(sum.pcs,sum.meta)}\n\n`;
   for(const A of AS){
     const x=A.tot,c=A.maq;
     b+=`${c.nome.toUpperCase()}\n`;
     b+=`- Produção: ${nf(x.pcs)} peças (${nf(x.inc)} ${c.unid}s, ${nf(A.pc)} peças cada)\n`;
+    if(x.incAposLacuna>0)b+=`- Data incerta: ${nf(x.incAposLacuna)} incrementos registrados logo após uma lacuna, contados no carimbo em que apareceram\n`;
     if(x.naoAtrib>0)b+=`- Não atribuído: ${nf(x.naoAtrib)} incrementos vindos após lacuna ou borda, fora da contagem\n`;
     b+=`- Primeira marcação: ${x.primeiroReg==null?NAO_CALC:dtBR(x.primeiroReg)}\n`;
     b+=`- Última marcação: ${x.ultimoReg==null?NAO_CALC:dtBR(x.ultimoReg)}\n`;
@@ -2485,19 +2543,22 @@ function sufixoJanela(){
 const cabecalhoJanela=()=>[
   ['Periodo_inicio',dtBR(LAST.ini)],['Periodo_fim',dtBR(LAST.fim)],
   ['Base_de_calculo',rotuloBase(LAST.base)],
+  ['Contagem_dos_incrementos',rotuloContagem(LAST.contagem)],
   ['Limiar_parada_min',csvNum(LAST.lim,1)],['Limiar_sem_dados_min',csvNum(LAST.limSD,1)],
   ['Turno_desconsiderado',LAST.excl?(TUR.find(t=>t.id===LAST.excl)||{}).nome||LAST.excl:'nenhum'],
   ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
 ];
 
-const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc','Nao_atribuido',
+const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
+  'Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
   'Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
   'Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
-const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),nf0(l.naoAtrib),
+const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
+  nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
   csvPct(l.oee.marcacoes),csvPct(l.oee.programado),csvPct(l.oee.observado),
@@ -2871,6 +2932,8 @@ function dialogoCards(){
 function montarBases(){
   $('a_base').innerHTML=BASES.map(([k,r,d])=>
     `<option value="${k}" title="${esc(d)}">${esc(r)}</option>`).join('');
+  $('a_contagem').innerHTML=CONTAGENS.map(([k,r,d])=>
+    `<option value="${k}" title="${esc(d)}">${esc(r)}</option>`).join('');
 }
 function aplicarPrefsNaTela(){
   montarBases();
@@ -2878,15 +2941,20 @@ function aplicarPrefsNaTela(){
   $('a_gran').value=PREFS.gran;$('a_tipo').value=PREFS.tipo;$('a_base').value=PREFS.base;
   $('a_lim').value=PREFS.limParada;$('a_limsd').value=PREFS.limSemDados;
   $('a_autoseg').value=PREFS.autoSeg;
-  $('a_basehelp').textContent=descBase(PREFS.base);
+  $('a_contagem').value=PREFS.contagem;
+  ajudaCalculo();
 }
 
 /* --- ligações ------------------------------------------------------------ */
 $('a_go').addEventListener('click',()=>rodarAnalise());
 $('a_cards').addEventListener('click',dialogoCards);
 $('a_limpar').addEventListener('click',limparRelatorio);
-$('a_base').addEventListener('change',()=>{$('a_basehelp').textContent=descBase($('a_base').value)});
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base']
+const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
+  '<b>Base:</b> '+esc(descBase($('a_base').value))
+  +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
+$('a_base').addEventListener('change',ajudaCalculo);
+$('a_contagem').addEventListener('change',ajudaCalculo);
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));

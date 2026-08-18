@@ -68,10 +68,23 @@ test('capacidade e meta ausentes aparecem no painel de validação', () => {
   assert.ok(V.some(v => v.codigo === 'META'));
 });
 
-test('produção não atribuída é reportada em vez de silenciada', () => {
+test('incremento vindo depois de lacuna é contado e marcado como data incerta', () => {
   const pts = [[T0, 1000], [T0 + 50 * 60000, 1090], [T0 + 51 * 60000, 1091]];
   const a = an(MAQ_LOTE, [dia('m1', '2026-08-17', pts)]);
   const t = A.metricas(a, T0, T1);
+  assert.equal(t.inc, 91, 'nenhuma caixa some da contagem');
+  assert.equal(t.incAposLacuna, 90);
+  assert.equal(t.naoAtrib, 0);
+  const q = A.qualidade(a, t);
+  assert.equal(q.dataIncerta, 90);
+  assert.ok(A.validacoes(a, t, {}).some(v => v.codigo === 'DATA-INCERTA'));
+});
+
+test('no modo "semLacuna" o mesmo incremento é reportado como não atribuído', () => {
+  const pts = [[T0, 1000], [T0 + 50 * 60000, 1090], [T0 + 51 * 60000, 1091]];
+  const a = an(MAQ_LOTE, [dia('m1', '2026-08-17', pts)], { contagem: 'semLacuna' });
+  const t = A.metricas(a, T0, T1);
+  assert.equal(t.inc, 1);
   assert.equal(t.naoAtrib, 90);
   assert.ok(A.validacoes(a, t, {}).some(v => v.codigo === 'NAO-ATRIBUIDO'));
 });
@@ -91,6 +104,7 @@ test('preferências: padrão completo, mescla defensiva e descarte de chave mort
   assert.equal(m.base, 'marcacoes', 'base inválida cai no padrão');
   assert.equal(m.limParada, p.limParada, 'limiar inválido cai no padrão');
   assert.equal(m.cards.producao, false, 'a escolha do usuário é preservada');
+  assert.equal(A.mesclaPrefs(p, { contagem: 'inventado' }).contagem, 'tudo', 'contagem inválida cai no padrão');
   assert.equal('zumbi' in m.cards, false, 'card que não existe mais é descartado');
   assert.equal(A.mesclaPrefs(p, null).base, 'marcacoes');
 });

@@ -10,7 +10,7 @@ const QUAL_CLASSE={boa:'g',aceitavel:'w',ruim:'r',sem:'n'};
 
 function qualidade(A,t){
   const o=A.origem||{duplicados:0,foraDeOrdem:0,frac:0};
-  const graves=(o.frac>0?1:0)+(o.foraDeOrdem>0?1:0)+(t.naoAtrib>0?1:0);
+  const graves=(o.frac>0?1:0)+(o.foraDeOrdem>0?1:0)+(t.naoAtrib>0?1:0)+(t.incAposLacuna>0?1:0);
   const cob=t.cobertura;                 // null quando o período tem duração zero
   let classe;
   if(!t.regs)classe='sem';
@@ -19,7 +19,9 @@ function qualidade(A,t){
   else classe='ruim';
   return{classe,rotulo:QUAL_ROT[classe],cor:QUAL_CLASSE[classe],cobertura:cob,
     registros:t.regs,incrementos:t.inc,semAlteracao:t.semAlt,resets:t.resets,
-    naoAtribuido:t.naoAtrib,lacunas:t.nLac,minutosSemDados:t.semDados,
+    naoAtribuido:t.naoAtrib,dataIncerta:(t.incAposLacuna||0)+(t.incBorda||0),
+    aposLacuna:t.incAposLacuna||0,naBorda:t.incBorda||0,
+    lacunas:t.nLac,minutosSemDados:t.semDados,
     duplicados:o.duplicados,foraDeOrdem:o.foraDeOrdem,fracionados:o.frac,
     deltasMaiores:A.deltasMaiores||0};
 }
@@ -42,8 +44,18 @@ function validacoes(A,t,ctx){
 
   if(t.naoAtrib>0)
     add('aten','NAO-ATRIBUIDO',nf(t.naoAtrib)+' incrementos não atribuídos',
-      'Vieram depois de uma lacuna ou de uma borda do período, sem como afirmar em que momento foram produzidos. '
-      +'Ficaram fora da produção contada, em vez de serem lançados num horário inventado.');
+      'Vieram depois de uma lacuna ou do registro anterior à janela, sem como afirmar em que momento foram produzidos, '
+      +'e o modo de contagem escolhido os deixa fora da produção. Para somá-los, troque a contagem para '
+      +'“todo incremento conta, a partir da segunda marcação”.');
+  if(t.incAposLacuna>0)
+    add('aten','DATA-INCERTA',nf(t.incAposLacuna)+' incrementos com data incerta',
+      'Apareceram no primeiro registro depois de uma ausência de dados de '+hDur(t.semDados)+' no total. '
+      +'Estão contados na produção, no carimbo em que o historian os registrou, mas o instante real da produção '
+      +'está em algum ponto da lacuna.');
+  if(t.incBorda>0)
+    add('info','BORDA',nf(t.incBorda)+' incrementos vindos do registro anterior à janela',
+      'O primeiro registro do período trouxe um incremento acumulado desde a marcação anterior, que está fora da janela. '
+      +'Está contado aqui porque foi registrado aqui — a primeira marcação em si nunca conta como produção.');
 
   if(q.fracionados>0)
     add('crit','FRACIONADO',nf(q.fracionados)+' registros com valor quebrado',

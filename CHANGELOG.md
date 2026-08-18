@@ -3,6 +3,31 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [4.2.0] — 2026-08-18
+
+### Corrigido
+- **Produção perdida na primeira marcação do período.** O incremento registrado
+  logo depois de uma lacuna de dados era descartado como “produção não
+  atribuída”. Como o descarte valia para qualquer janela que contivesse aquele
+  carimbo, a caixa não aparecia em janela nenhuma — sumia da base. No caso
+  relatado, 25 caixas entre as leituras 1.006.142 e 1.006.167 eram computadas
+  como 24. O mesmo acontecia com o incremento cujo registro anterior ficava
+  fora da janela, quando o intervalo era uma parada.
+
+### Adicionado
+- Seletor **“Contagem dos incrementos”**, com dois modos:
+  *Todo incremento conta, a partir da segunda marcação* (novo padrão) e
+  *Não contar incrementos vindos depois de uma lacuna* (comportamento anterior,
+  que passa a ser uma escolha explícita).
+- Marca **Data incerta** no painel de qualidade, no cartão de produção, na lista
+  de registros e nos CSV: separa o incremento cuja quantidade é certa mas cujo
+  instante está dentro de uma lacuna. Ele é contado, e fica identificado.
+- Validações `DATA-INCERTA` e `BORDA` no painel de validação.
+
+### Alterado
+- Intervalos entre registros acima de uma hora passam a ser exibidos como
+  duração (`14h32`) em vez de segundos (`52.324,2 s`).
+
 ## [4.1.0] — 2026-08-18
 
 Ajuste de duas regras de negócio a partir do comportamento real da linha.
