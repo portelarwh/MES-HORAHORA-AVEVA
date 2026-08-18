@@ -150,8 +150,21 @@ test('parada e ausência de dados são separadas pelos dois limiares', () => {
   assert.ok(a.lacunas.some(l => Math.abs(l.min - 50) < 1e-6), 'a lacuna de 50 min existe');
   perto(t.parado, 10);
   perto(t.semDados, 50 + 59);                   // a lacuna mais o tempo após o último registro
-  assert.equal(t.naoAtrib, 1, 'o incremento vindo depois da lacuna não é atribuído');
-  assert.equal(t.inc, 2);                       // 1000→1001 e 1002→1003
+  assert.equal(t.inc, 3, 'todo delta conta, inclusive o que veio depois da lacuna');
+  assert.equal(t.incAposLacuna, 1, 'o incremento de depois da lacuna fica marcado como data incerta');
+  assert.equal(t.naoAtrib, 0);
+});
+
+test('modo "semLacuna" deixa fora o incremento vindo depois da lacuna', () => {
+  const pts = [
+    [T0, 1000], [T0 + 10 * 60000, 1001], [T0 + 60 * 60000, 1002], [T0 + 61 * 60000, 1003]
+  ];
+  const ini = T0, fim = T0 + 120 * 60000;
+  const a = an(MAQ_LOTE, [dia('m1', '2026-08-17', pts)], { ini, fim, contagem: 'semLacuna' });
+  const t = A.metricas(a, ini, fim);
+  assert.equal(t.inc, 2);
+  assert.equal(t.naoAtrib, 1);
+  assert.equal(t.incAposLacuna, 0);
 });
 
 test('cenário 18 e 19 — abono sai de todas as bases, inclusive quando só parte cai no período', () => {
