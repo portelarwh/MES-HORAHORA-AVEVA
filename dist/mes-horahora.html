@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v4.3.0 · build 2026-08-18 -->
+  <!-- MES Hora a Hora — AVEVA · v5.0.0 · build 2026-08-18 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -313,6 +313,7 @@ section[data-aberto="false"] h2{margin-bottom:0}
   <button type="button" role="tab" data-v="importar" aria-selected="false">Importar</button>
   <button type="button" role="tab" data-v="maquinas" aria-selected="false">Máquinas <span class="cnt" id="c_maq">0</span></button>
   <button type="button" role="tab" data-v="turnos" aria-selected="false">Turnos <span class="cnt" id="c_tur">0</span></button>
+  <button type="button" role="tab" data-v="catalogos" aria-selected="false">Catálogos <span class="cnt" id="c_cat">0</span></button>
   <button type="button" role="tab" data-v="dia" aria-selected="false">Lançamentos <span class="cnt" id="c_aju">0</span></button>
   <button type="button" role="tab" data-v="dados" aria-selected="false">Base de dados</button>
 </nav>
@@ -356,6 +357,16 @@ section[data-aberto="false"] h2{margin-bottom:0}
           <select id="a_contagem"></select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
+
+      <div class="sublbl">Catálogo do período</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <div class="fld" style="min-width:330px"><label for="a_cat">Catálogo</label><select id="a_cat"></select></div>
+        <button type="button" class="act" id="a_cat_todas">Aplicar a todas as horas</button>
+        <button type="button" class="act dgr" id="a_cat_limpar">Limpar programação</button>
+      </div>
+      <p class="note" style="margin-top:0;margin-bottom:16px">Aplica o catálogo escolhido a todas as horas do período,
+        nas máquinas selecionadas. Para uma troca de catálogo no meio do processo, edite a hora diretamente na coluna
+        <b>Catálogo</b> da tabela <b>Detalhe por hora</b>.</p>
 
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
@@ -435,6 +446,17 @@ section[data-aberto="false"] h2{margin-bottom:0}
   </section>
 </div>
 
+<div class="view" id="v_catalogos">
+  <section>
+    <h2>Catálogos</h2>
+    <p class="lede">Cada catálogo é um produto com a sua própria meta em peças por hora. A meta de uma hora é a do
+      catálogo programado para ela; sem programação, vale o catálogo padrão da máquina; sem catálogo padrão, a meta
+      cadastrada na própria máquina.</p>
+    <div id="k_lista"></div>
+    <div class="acts"><button type="button" class="act pri" id="k_novo">Cadastrar catálogo</button></div>
+  </section>
+</div>
+
 <div class="view" id="v_dia">
   <section>
     <h2>Lançamentos manuais</h2>
@@ -498,7 +520,7 @@ section[data-aberto="false"] h2{margin-bottom:0}
    segurança contra erro isolado. Formatação vive em 01-format.js. */
 "use strict";
 
-let MAQ=[],TUR=[],AJU=[],LAST=null,PRONTO=false;
+let MAQ=[],TUR=[],AJU=[],CAT=[],LAST=null,PRONTO=false;
 
 const $=i=>document.getElementById(i);
 const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
@@ -641,6 +663,7 @@ const CARDS=[
   ['periodo','Período selecionado','Período',1],
   ['dados','Tempo com dados','Período',1],
   ['semdados','Tempo sem dados','Período',1],
+  ['catalogo','Catálogo do período','Produção',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
   ['oeeprog','OEE programado','Desempenho',0],
@@ -663,7 +686,7 @@ const CARDS=[
 /* Seções da análise. [id, rótulo, padrão] */
 const OPCOES=[
   ['meta','Linha de meta',1],['cap','Linha de capacidade',1],['rot','Rótulos no gráfico',1],
-  ['acum','Acumulado',0],['turno','Fechamento por turno',1],['hora','Detalhe por hora',1],
+  ['corMeta','Colorir o gráfico por atingimento',1],['acum','Acumulado',0],['turno','Fechamento por turno',1],['hora','Detalhe por hora',1],
   ['cad','Cadência',1],['registros','Registros individuais',0],['qual','Qualidade dos dados',1],
   ['valid','Painel de validação',1],['dgn','Diagnóstico',1],['rastro','Rastreabilidade dos cálculos',1]
 ];
@@ -742,20 +765,34 @@ if(typeof module!=='undefined'&&module.exports)module.exports={
 /* === 10-db.js === */
 /* 10-db.js — Camada IndexedDB e normalização dos registros de máquina.
 
-   Banco `monitor-hh`, versão 1 — inalterada nesta revisão. Nenhum store novo,
-   nenhuma mudança de keyPath: base e backup gerados por versões anteriores
-   continuam sendo lidos sem conversão. As preferências de tela ficam no
-   localStorage (02-config.js), fora do banco de produção. */
+   Banco `monitor-hh`, versão 2.
+
+   Migração 1 -> 2: cria os stores `catalogos` e `programacao`. É uma migração
+   puramente aditiva — nenhum store existente é tocado, nenhum keyPath muda e
+   nenhum registro é reescrito. Uma base da versão 1 abre na 2 com todos os
+   dados intactos e os dois stores novos vazios; a análise cai no fallback da
+   meta cadastrada na máquina até que algum catálogo seja criado.
+
+   As preferências de tela ficam no localStorage (02-config.js), fora do banco
+   de produção. */
 "use strict";
 
 const DB={db:null};
-const DB_NOME='monitor-hh',DB_VER=1;
+const DB_NOME='monitor-hh',DB_VER=2;
 function abrir(){return new Promise((res,rej)=>{
   const r=indexedDB.open(DB_NOME,DB_VER);
-  r.onupgradeneeded=e=>{const d=e.target.result;
-    ['maquinas','turnos','ajustes'].forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'})});
-    if(!d.objectStoreNames.contains('dias'))d.createObjectStore('dias',{keyPath:'chave'});};
-  r.onsuccess=e=>{DB.db=e.target.result;res()};r.onerror=()=>rej(r.error);});}
+  r.onupgradeneeded=e=>{
+    const d=e.target.result,de=e.oldVersion;
+    /* Criação idempotente: vale tanto para banco novo quanto para base v1. */
+    ['maquinas','turnos','ajustes','catalogos'].forEach(s=>{
+      if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'})});
+    ['dias','programacao'].forEach(s=>{
+      if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'chave'})});
+    if(de&&de<2)console.info('[monitor] base migrada da versão '+de+' para '+DB_VER+' — nenhum registro alterado');
+  };
+  r.onsuccess=e=>{DB.db=e.target.result;res()};
+  r.onerror=()=>rej(r.error);
+  r.onblocked=()=>rej(new Error('outra aba está com a versão anterior do banco aberta'));});}
 const stx=(s,m)=>DB.db.transaction(s,m).objectStore(s);
 const req=r=>new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
 const getAll=s=>req(stx(s,'readonly').getAll());
@@ -772,6 +809,15 @@ function diasDoIntervalo(maquinaId,de,ate){
   return req(stx('dias','readonly').getAll(faixa));
 }
 
+/* Programação de catálogo por hora, uma linha por máquina e dia:
+   { chave:"maqId|AAAA-MM-DD", maquinaId, data, horas:{ "6":catalogoId, ... } }
+   Espelha o formato de `dias` — ler um intervalo é um range da chave primária. */
+function programacaoDoIntervalo(maquinaId,de,ate){
+  const faixa=IDBKeyRange.bound(maquinaId+'|'+de,maquinaId+'|'+ate+'￿');
+  return req(stx('programacao','readonly').getAll(faixa));
+}
+const chaveProg=(maquinaId,data)=>maquinaId+'|'+data;
+
 function normaliza(m){
   if(m.porInc===undefined){m.porInc=m.tubos||1;m.modo=(m.tubos&&m.tubos>1)?'lote':'unidade'}
   if(!m.modo)m.modo='lote';
@@ -780,10 +826,12 @@ function normaliza(m){
 }
 async function recarregar(){
   MAQ=(await getAll('maquinas')).map(normaliza).sort((a,b)=>a.nome.localeCompare(b.nome));
+  CAT=(await getAll('catalogos')).sort((a,b)=>String(a.numero).localeCompare(String(b.numero),'pt-BR',{numeric:true}));
   TUR=(await getAll('turnos')).sort((a,b)=>hm(a.inicio)-hm(b.inicio));
   AJU=(await getAll('ajustes')).sort((a,b)=>(b.data+(b.inicio||'')).localeCompare(a.data+(a.inicio||'')));
-  $('c_maq').textContent=MAQ.length;$('c_tur').textContent=TUR.length;$('c_aju').textContent=AJU.length;
-  montarBorda();
+  $('c_maq').textContent=MAQ.length;$('c_tur').textContent=TUR.length;
+  $('c_aju').textContent=AJU.length;$('c_cat').textContent=CAT.length;
+  montarBorda();montarSeletorCatalogo();
 }
 
 /* === 20-csv.js === */
@@ -977,6 +1025,44 @@ function serieDePontos(dias){
   return{pts,duplicados,foraDeOrdem,frac};
 }
 
+/* --- meta por hora, vinda do catálogo -----------------------------------
+   Cada hora de relógio pode rodar um catálogo diferente, com meta própria. A
+   meta de um recorte é a média das metas horárias PONDERADA pelos minutos que
+   o recorte ocupa em cada hora — assim um turno que troca de catálogo no meio
+   fica com a meta certa, e uma hora inteira fica com a meta do seu catálogo. */
+const chaveHora=ms=>{const d=new Date(ms);return iso(d)+'T'+pad2(d.getHours())};
+
+function horasDaJanela(ini,fim,metaHoras,padrao){
+  const out=[];
+  const d=new Date(ini);d.setMinutes(0,0,0);
+  for(let t=d.getTime();t<fim;t+=3600000){
+    const info=(metaHoras&&metaHoras.get(chaveHora(t)))||padrao||null;
+    out.push({a:t,b:t+3600000,
+      metaHora:info&&Number.isFinite(info.metaHora)&&info.metaHora>0?info.metaHora:null,
+      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null});
+  }
+  return out;
+}
+/* Média ponderada da meta e a lista de catálogos que o recorte atravessou. */
+function metaDoRecorte(horas,a,b){
+  let min=0,peso=0,semMeta=0;const usados=new Map();
+  for(const h of horas){
+    if(h.b<=a)continue;
+    if(h.a>=b)break;
+    const m=ovl(h.a,h.b,a,b);
+    if(m<=0)continue;
+    min+=m;
+    if(h.metaHora==null){semMeta+=m;continue}
+    peso+=m*h.metaHora;
+    const k=h.catalogoId||'_';
+    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,metaHora:h.metaHora,min:0};
+    u.min+=m;usados.set(k,u);
+  }
+  const comMeta=min-semMeta;
+  return{metaEfetiva:comMeta>0?peso/comMeta:null,minutos:min,minutosSemMeta:semMeta,
+    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min)};
+}
+
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
 /* opts: {ini, fim, limParadaMin, limSemDadosMin, ajustes, base} */
 function analisarMaquina(maq,dias,opts){
@@ -1037,8 +1123,14 @@ function analisarMaquina(maq,dias,opts){
   const tcs=eventos.filter(e=>e.contabiliza&&e.delta>0).map(e=>e.gapS/e.delta).sort((a,b)=>a-b);
   const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
 
+  /* Sem catálogo programado nem catálogo padrão, a meta é a cadastrada na
+     própria máquina: uma base sem nenhum catálogo continua calculando igual. */
+  const metaPadrao=opts.metaPadrao||{
+    metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
+    catalogoId:null,numero:null,tipo:'meta da máquina'};
   return{maq,pc,ini,fim,base:opts.base||'marcacoes',
-    turnoSegs:opts.turnoSegs||[],
+    turnoSegs:opts.turnoSegs||[],metaPadrao,
+    horasMeta:horasDaJanela(ini,fim,opts.metaHoras,metaPadrao),
     ajustes:opts.ajustes||[],pts,dentro,eventos,
     cobertura:cob,lacunas:lac.sort((a,b)=>b.min-a.min),
     paradas:par.sort((a,b)=>b.min-a.min),
@@ -1161,11 +1253,13 @@ function metricas(A,a,b,prod){
 
   const pcs=inc*pc;
   const bom=Math.max(0,pcs-L.refugo-L.retrab);
+  const M=metaDoRecorte(A.horasMeta||[],a,b);
+  const metaEfetiva=M.metaEfetiva;
   const planCap={},planMeta={},oee={},ating={};
   for(const k of Object.keys(tempos)){
     const t=tempos[k];
     planCap[k]=t==null?null:c.cap*(t/60);
-    planMeta[k]=t==null?null:c.meta*(t/60);
+    planMeta[k]=(t==null||metaEfetiva==null)?null:metaEfetiva*(t/60);
     oee[k]=razao(pcs,planCap[k]);
     ating[k]=razao(pcs,planMeta[k]);
   }
@@ -1177,6 +1271,7 @@ function metricas(A,a,b,prod){
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
+    metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -1272,7 +1367,7 @@ function bucketsDe(gran,ini,fim,turnos,excluirId){
 if(typeof module!=='undefined'&&module.exports)module.exports={
   pecas,ovl,unirSegs,ovlSegs,dentroSegs,recortarSegs,inverterSegs,classificar,
   NORMAL,PARADA,SEMDADOS,serieDePontos,analisarMaquina,lancDe,metricas,
-  turnosNoIntervalo,bucketsDe};
+  turnosNoIntervalo,bucketsDe,chaveHora,horasDaJanela,metaDoRecorte};
 
 /* === 41-quality.js === */
 /* 41-quality.js — Qualidade dos dados e painel de validação. Módulo puro.
@@ -1493,8 +1588,10 @@ async function rodarAnalise(opts){
     let dias=[];
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
+    const MM=await metaHorasDaMaquina(m,deK,ateK);
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
-      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem}));
+      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
+      metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));
   }
   if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
@@ -1590,6 +1687,17 @@ function cardsDe(A){
       +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
       +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta, vindos depois de lacuna':'')
       +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    /* Quando o período atravessa mais de um catálogo, a meta é a média das
+       metas horárias ponderada pelos minutos — o card mostra a composição. */
+    catalogo:()=>{
+      const L=t.catalogos||[];
+      const princ=L[0];
+      return['catalogo','Catálogo do período',
+        L.length===0?NAO_CALC:L.length===1?esc(princ.numero||'sem catálogo'):L.length+' catálogos',
+        L.length===1&&princ.tipo?esc(princ.tipo):'meta efetiva '+fmtVal(t.metaEfetiva)+' peças/h','o',
+        L.length?L.map(k=>esc(k.numero||'sem catálogo')+' '+hDur(k.min)+' · '+nf(k.metaHora)+' peças/h').join(' | ')
+          :'nenhuma hora do período tem meta cadastrada'];
+    },
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -1605,9 +1713,12 @@ function cardsDe(A){
     semdados:()=>['semdados','Tempo sem dados',hDur(t.semDados),
       t.nLac+' lacuna'+(t.nLac===1?'':'s')+' no período',t.semDados>0?'w':'g',
       'não é parada: é ausência de registro e fica fora do denominador observado'],
+    /* A meta por hora vem do catálogo, não do cadastro da máquina: o rótulo
+       tem de mostrar a meta efetiva que realmente entrou na conta. */
     meta:()=>['meta','Meta proporcional',fmtVal(t.planMetaBase)+' peças',
       'atingimento '+fmtPct(t.atingBase),cl(t.atingBase),
-      nf(c.meta)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs],
+      fmtVal(t.metaEfetiva)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs
+      +((t.catalogos||[]).length>1?' · média ponderada de '+t.catalogos.length+' catálogos':'')],
     oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
       fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'
       +(t.base==='turno'?bonusTurno:'')),
@@ -1785,8 +1896,13 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
-    ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
-      nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
+    ['Meta por hora (catálogo)',(t.catalogos||[]).length>1
+        ? 'média das metas horárias ponderada pelos minutos'
+        : 'meta do catálogo da hora',
+      (t.catalogos||[]).map(k=>esc(k.numero||'sem catálogo')+' '+nf(k.metaHora)+'×'+nf1(k.min)+'min').join(' + ')||NAO_CALC,
+      fmtVal(t.metaEfetiva)+' peças/h'],
+    ['Meta proporcional ('+bs+')','meta efetiva × base ÷ 60',
+      fmtVal(t.metaEfetiva)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
     ['Atingimento','peças ÷ meta proporcional',
       nf(t.pcs)+' ÷ '+fmtVal(t.planMetaBase),fmtPct(t.atingBase)],
     ['Planejado pela capacidade ('+bs+')','capacidade por hora × base ÷ 60',
@@ -1950,7 +2066,11 @@ function renderAnalise(){
   lg.style.cssText='display:flex;flex-wrap:wrap;gap:15px;font-size:13px;color:var(--tx2);margin-bottom:13px';
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
     +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
-    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
+    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'')
+    +(secaoAtiva('corMeta')?'<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
+      +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>bateu a meta</span>'
+      +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>85% ou mais</span>'
+      +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo de 85%</span></span>':'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 
@@ -2068,27 +2188,43 @@ function linhasRegistros(A,L){
 const CAB_REG='<thead><tr><th>Data e hora do registro</th><th>Contador</th><th>Δ</th><th>Peças</th>'
   +'<th>Intervalo</th><th>Classificação</th><th>Contabilizado</th></tr></thead>';
 
-/* --- detalhe por hora ---------------------------------------------------- */
+/* --- detalhe por hora ----------------------------------------------------
+   Além da hora isolada, a tabela carrega o acumulado do período: peças
+   acumuladas contra meta acumulada. É a leitura que diz se a linha está
+   recuperando ou afundando ao longo do turno, coisa que a coluna da hora
+   sozinha não mostra. */
 function tabelaHoras(A,linhas){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Hora</th><th rowspan="2">Regs</th>'
+    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Regs</th>'
     +'<th class="grp" colspan="3">Produção</th>'
-    +'<th class="grp" colspan="2">Desempenho</th>'
+    +'<th class="grp" colspan="4">Acumulado no período</th>'
+    +'<th class="grp" colspan="2">Desempenho da hora</th>'
     +'<th class="grp" colspan="4">Tempo (min)</th>'
     +'<th class="grp" colspan="2">Cadência</th></tr><tr>'
     +`<th class="sep">${u}</th><th>Peças</th><th>vs anterior</th>`
+    +'<th class="sep">Peças</th><th>Planejado</th><th>Saldo</th><th>Atingimento</th>'
     +'<th class="sep">Meta</th><th>OEE</th>'
     +'<th class="sep">Com dados</th><th>Sem dados</th><th>Parado</th><th>Abono</th>'
     +'<th class="sep">Ritmo/h</th><th>Interv. (s)</th></tr></thead><tbody>';
-  let ant=null;
+  let ant=null,acPcs=0,acMeta=0;
   for(const l of linhas){
     const rot=(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot
       +(l.bk.parcial?` <span class="tag">${hhmm(new Date(l.a))}–${hhmm(new Date(l.b))}</span>`:'');
+    acPcs+=l.pcs;
+    if(l.planMetaBase!=null)acMeta+=l.planMetaBase;
+    const saldo=acMeta>0?acPcs-acMeta:null;
+    const cat=l.catalogos&&l.catalogos.length?l.catalogos[0]:null;
     h+=`<tr class="exp" data-a="${l.a}" data-b="${l.b}" tabindex="0" role="button" aria-expanded="false">`
-      +`<td><span class="cx">▸</span> ${rot}</td><td>${nf(l.regs)}</td>`
+      +`<td><span class="cx">▸</span> ${rot}</td>`
+      +`<td class="cat" style="text-align:left"><select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
+      +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
+      +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${seta(l.pcs,ant)}</td>`
+      +`<td class="sep">${nf(acPcs)}</td><td>${acMeta>0?nf(acMeta):NAO_CALC}</td>`
+      +`<td>${saldo==null?NAO_CALC:`<span class="arw ${saldo>=0?'up':'dn'}">${saldo>=0?'+':''}${nf(saldo)}</span>`}</td>`
+      +`<td>${pill(razao(acPcs,acMeta))}</td>`
       +`<td class="sep">${pill(l.atingBase)}</td><td>${pill(l.oeeBase,.85)}</td>`
       +`<td class="sep">${nf1(l.comDados)}</td><td>${l.semDados>0?nf1(l.semDados):'—'}</td>`
       +`<td>${l.parado>0?nf1(l.parado):'—'}</td><td>${l.abono>0?nf1(l.abono):'—'}</td>`
@@ -2096,8 +2232,11 @@ function tabelaHoras(A,linhas){
     ant=l.pcs;
   }
   const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total do período</td><td>${nf(t.regs)}</td>`
+  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td>${nf(t.regs)}</td>`
     +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td><td>${NAO_CALC}</td>`
+    +`<td class="sep">${nf(t.pcs)}</td><td>${fmtVal(t.planMetaBase)}</td>`
+    +`<td>${t.planMetaBase==null?NAO_CALC:(t.pcs-t.planMetaBase>=0?'+':'')+nf(t.pcs-t.planMetaBase)}</td>`
+    +`<td>${fmtPct(t.atingBase)}</td>`
     +`<td class="sep">${fmtPct(t.atingBase)}</td><td>${fmtPct(t.oeeBase)}</td>`
     +`<td class="sep">${nf1(t.comDados)}</td><td>${nf1(t.semDados)}</td>`
     +`<td>${nf1(t.parado)}</td><td>${nf1(t.abono)}</td>`
@@ -2107,8 +2246,13 @@ function tabelaHoras(A,linhas){
 /* Expansão: mostra apenas os registros dentro da janela daquela linha. */
 function ligarExpansao(tbl,A){
   tbl.addEventListener('click',e=>{
+    if(e.target.closest('.selCat'))return;          // o seletor de catálogo não expande a linha
     const tr=e.target.closest('tr.exp');if(!tr||!tbl.contains(tr))return;
     alternarExpansao(tr,A);
+  });
+  tbl.addEventListener('change',e=>{
+    const sel=e.target.closest('.selCat');if(!sel)return;
+    definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);
   });
   tbl.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.key!==' ')return;
@@ -2165,7 +2309,8 @@ function secaoHoras(out){
   for(const A of LAST.AS){
     const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por hora — ${esc(A.maq.nome)}`,
       'Clique em uma linha para ver os registros individuais daquela hora. '
-      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela.',
+      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela. '
+      +'A coluna <b>Catálogo</b> troca a meta daquela hora — use para registrar uma troca de produto no meio do processo.',
       'horas:'+A.maq.id);
     const w=el('div','tblwrap'),tbl=el('table');
     w.appendChild(tbl);s.appendChild(w);
@@ -2224,9 +2369,16 @@ function desenhar(){if(!LAST)return;if($('ch'))protegido('o gráfico',()=>grafic
   if($('tl'))protegido('a cadência',cadencia);}
 
 function grafico(cv,forcaW,forcaH){
-  const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706'}:TH();
+  const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706',
+    ok:'#1B8A5A',warn:'#B27300',bad:'#C33C4E'}:TH();
   const {AS,B}=LAST,{x,w,h}=setup(cv,forcaH||340,forcaW);
   const acum=secaoAtiva('acum'),rot=secaoAtiva('rot');
+  /* Cor por atingimento da meta daquele recorte: verde bateu, âmbar chegou
+     perto, vermelho ficou longe, neutro não calculável. Com mais de uma
+     máquina a identidade fica no contorno, para não perder quem é quem. */
+  const porMeta=secaoAtiva('corMeta');
+  const COR={g:T.ok||'#1B8A5A',w:T.warn||'#B27300',r:T.bad||'#C33C4E',n:T.tx3};
+  const corDe=(A,i)=>porMeta?COR[cl(A.linhas[i].atingBase)]:A.maq.cor;
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
@@ -2251,8 +2403,9 @@ function grafico(cv,forcaW,forcaH){
     const gap=Math.min(4,bw*.06),tot=bw*.66,bwid=Math.max(2,(tot-gap*(AS.length-1))/AS.length);
     AS.forEach((A,k)=>series[k].forEach((v,j)=>{
       const cx=pad.l+bw*j+bw/2-tot/2+k*(bwid+gap),y=Y(v),hh=Math.max(1.5,pad.t+ih-y);
-      x.fillStyle=A.maq.cor;x.beginPath();
+      x.fillStyle=corDe(A,idx[j]);x.beginPath();
       if(x.roundRect)x.roundRect(cx,y,bwid,hh,[4,4,0,0]);else x.rect(cx,y,bwid,hh);x.fill();
+      if(porMeta&&AS.length>1){x.strokeStyle=A.maq.cor;x.lineWidth=1.6;x.stroke()}
       if(rot&&AS.length<=2&&bw>(forcaW?26:30)){x.fillStyle=T.tx;x.textAlign='center';
         x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
         x.fillText(v>=1000?nf(v/1000)+'k':nf(v),cx+bwid/2,y-8)}
@@ -2262,8 +2415,8 @@ function grafico(cv,forcaW,forcaH){
       x.strokeStyle=A.maq.cor;x.lineWidth=2.2;x.lineJoin='round';x.beginPath();
       series[k].forEach((v,j)=>{const px=pad.l+bw*j+bw/2;j?x.lineTo(px,Y(v)):x.moveTo(px,Y(v))});x.stroke();
       if(idx.length<=40)series[k].forEach((v,j)=>{const px=pad.l+bw*j+bw/2;
-        x.fillStyle=A.maq.cor;x.beginPath();x.arc(px,Y(v),3.2,0,7);x.fill();
-        x.strokeStyle=T.card;x.lineWidth=1.5;x.stroke()});
+        x.fillStyle=corDe(A,idx[j]);x.beginPath();x.arc(px,Y(v),porMeta?4.2:3.2,0,7);x.fill();
+        x.strokeStyle=porMeta?A.maq.cor:T.card;x.lineWidth=1.6;x.stroke()});
     });
   }
   const pulo=Math.max(1,Math.ceil(idx.length/(iw/(forcaW?38:52))));
@@ -2281,11 +2434,26 @@ function grafico(cv,forcaW,forcaH){
     x.fillStyle=T.tx3;x.textAlign='left';x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
     x.fillText('capacidade '+nf(capMax/1000)+'k',pad.l+5,Y(capMax)-8);
   }
-  if(!acum&&secaoAtiva('meta')&&metaMax>0){
-    x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);
-    x.beginPath();x.moveTo(pad.l,Y(metaMax));x.lineTo(w-pad.r,Y(metaMax));x.stroke();x.setLineDash([]);
-    x.fillStyle=T.meta;x.textAlign='left';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
-    x.fillText('meta '+nf(metaMax/1000)+'k',pad.l+5,Y(metaMax)-8);
+  if(!acum&&secaoAtiva('meta')){
+    /* A meta pode mudar de hora para hora quando o catálogo troca, então a
+       linha é um degrau que acompanha o planejado de cada recorte. */
+    const A0=AS[0],metas=idx.map(i=>A0.linhas[i].planMetaBase);
+    x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);x.beginPath();
+    let desenhou=false;
+    metas.forEach((mv,j)=>{
+      if(mv==null||!isFinite(mv))return;
+      const x0=pad.l+bw*j,x1=x0+bw,yv=Y(mv);
+      if(!desenhou){x.moveTo(x0,yv);desenhou=true}else x.lineTo(x0,yv);
+      x.lineTo(x1,yv);
+    });
+    if(desenhou)x.stroke();
+    x.setLineDash([]);
+    /* rótulo à direita para nunca colidir com o da capacidade, que fica à esquerda */
+    const ref=metas.find(v=>v!=null&&isFinite(v));
+    if(ref!=null){
+      x.fillStyle=T.meta;x.textAlign='right';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
+      x.fillText('meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref)),w-pad.r-5,Y(ref)-8);
+    }
   }
 }
 
@@ -2563,7 +2731,9 @@ function textoEmail(){
     if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
     if(x.incForaTurno>0)b+=`- Bônus: ${nf(x.pcsForaTurno)} peças produzidas fora de turno cadastrado, no numerador sem custar denominador\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
-    b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
+    if((x.catalogos||[]).length)
+      b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;
+    b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças a ${fmtVal(x.metaEfetiva)} peças/h — atingimento ${fmtPct(x.atingBase)}\n`;
     b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
     b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;
     b+=`- Intervalo médio entre ${c.unid}s: ${fmtSeg(x.interv)}\n`;
@@ -2648,7 +2818,7 @@ const cabecalhoJanela=()=>[
 const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
   'Fora_de_turno_inc','Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
-  'Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
+  'Catalogos','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_turno_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Turno_cadastrado_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
@@ -2656,6 +2826,7 @@ const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
 const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
   nf0(l.incForaTurno),nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
+  (l.catalogos||[]).map(k=>k.numero||'sem catalogo').join(' + '),csvNum(l.metaEfetiva,0),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
   csvPct(l.oee.marcacoes),csvPct(l.oee.turno),csvPct(l.oee.programado),csvPct(l.oee.observado),
   csvPct(l.oee.operacional),csvPct(l.oee.parcial),
@@ -2715,7 +2886,7 @@ function exportarCSV(tipo){
 function formMaquina(m){
   const novo=!m;
   m=m||{id:uid(),nome:'',etapa:'',modo:'lote',porInc:1000,unid:'caixa',meta:90000,cap:115000,
-    offset:1,cor:PAL[MAQ.length%PAL.length],obs:''};
+    offset:1,catalogoId:'',cor:PAL[MAQ.length%PAL.length],obs:''};
   $('dlg_t').textContent=novo?'Cadastrar máquina':'Editar máquina';
   $('dlg_p').textContent='Capacidade e meta são sempre em peças por hora.';
   $('dlg_b').innerHTML=`<div class="grid">
@@ -2727,7 +2898,8 @@ function formMaquina(m){
     <div class="fld"><label>Peças por incremento</label><input type="number" id="f_por" value="${m.porInc}" min="1"></div>
     <div class="fld"><label>Nome do incremento</label><input id="f_unid" value="${esc(m.unid)}" placeholder="caixa, rack, palete"></div>
     <div class="fld"><label>Capacidade (peças/h)</label><input type="number" id="f_cap" value="${m.cap}" min="1" step="100"></div>
-    <div class="fld"><label>Meta (peças/h)</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
+    <div class="fld"><label for="f_meta">Meta (peças/h) — usada sem catálogo</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
+    <div class="fld"><label for="f_cat">Catálogo padrão</label><select id="f_cat">${optsCatalogo(m.catalogoId)}</select></div>
     <div class="fld"><label>Contador indica a próxima — contagem inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
     <div class="fld"><label>Cor no gráfico</label><select id="f_cor">${PAL.map(c=>`<option value="${c}" ${c===m.cor?'selected':''}>${c}</option>`).join('')}</select></div>
   </div>
@@ -2763,6 +2935,7 @@ function formMaquina(m){
     await put('maquinas',{id:m.id,nome,etapa:$('f_etapa').value.trim(),modo,
       porInc:modo==='unidade'?1:(+$('f_por').value||1),unid:$('f_unid').value.trim()||'caixa',
       meta:+$('f_meta').value||1,cap:+$('f_cap').value||1,offset:+$('f_off').value||0,
+      catalogoId:$('f_cat').value||'',
       cor:$('f_cor').value,obs:$('f_obs').value.trim()});
     $('dlg').close();await recarregar();
     montarMaquinas();montarAnalise();montarDia();montarDados();toast('Máquina salva');});
@@ -2778,7 +2951,8 @@ function montarMaquinas(){
       <div><div class="nm">${esc(m.nome)}${m.etapa?' <span class="tag">'+esc(m.etapa)+'</span>':''}</div>
       <div class="ds">${m.modo==='unidade'?'1 peça por incremento':nf(m.porInc)+' peças por '+esc(m.unid)}
         · capacidade ${nf(m.cap)} peças/h = ${nf1(m.cap/pc)} ${m.modo==='unidade'?'inc':esc(m.unid)+'s'}/h
-        · meta ${nf(m.meta)} peças/h · lote inicia em ${m.offset}</div>
+        · meta ${nf(m.meta)} peças/h · contagem inicia em ${m.offset}
+        · catálogo padrão ${m.catalogoId&&catPorId(m.catalogoId)?rotuloCat(catPorId(m.catalogoId)):'nenhum'}</div>
       ${m.obs?'<div class="ds" style="margin-top:3px;font-style:italic">'+esc(m.obs)+'</div>':''}</div><span class="sp"></span>`;
     const e=el('button','act');e.type='button';e.textContent='Editar';
     e.addEventListener('click',()=>formMaquina(m));
@@ -2920,6 +3094,7 @@ async function montarDados(){
     if(r.data<o.min)o.min=r.data;if(r.data>o.max)o.max=r.data;}
   $('db_kpis').innerHTML=[
     ['Máquinas',nf(MAQ.length),'cadastradas','c'],['Turnos',nf(TUR.length),'cadastrados','c'],
+    ['Catálogos',nf(CAT.length),'cadastrados','o'],
     ['Dias com dados',nf(all.length),'somando todas as máquinas','o'],
     ['Registros guardados',nf(pts),'pontos do contador','o']
   ].map(([k,v,u,x])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join('');
@@ -2933,9 +3108,11 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:4,dbVersao:DB_VER,exportado:new Date().toISOString(),
+  const bk={versao:5,dbVersao:DB_VER,exportado:new Date().toISOString(),
     maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
-    ajustes:await getAll('ajustes'),dias:await getAll('dias'),prefs:PREFS};
+    ajustes:await getAll('ajustes'),catalogos:await getAll('catalogos'),
+    programacao:await getAll('programacao'),
+    dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(bk)],{type:'application/json'}));
   a.download='backup-monitor-hh-'+iso(new Date())+'.json';a.click();toast('Backup gerado')});
@@ -2949,6 +3126,12 @@ $('db_file').addEventListener('change',e=>{
       for(const m of bk.maquinas||[])await put('maquinas',normaliza(m));
       for(const t of bk.turnos||[])await put('turnos',t);
       for(const j of bk.ajustes||[])await put('ajustes',j);
+      for(const k of bk.catalogos||[])await put('catalogos',k);
+      /* mescla por hora: restaurar não apaga programação de horas ausentes no backup */
+      for(const g of bk.programacao||[]){
+        const ex=await get1('programacao',g.chave);
+        await put('programacao',{...g,horas:{...((ex&&ex.horas)||{}),...(g.horas||{})}});
+      }
       for(const d of bk.dias||[]){
         const ex=await get1('dias',d.chave);
         if(ex){const mp=new Map(ex.pts.map(p=>[p[0],p[1]]));for(const p of d.pts)mp.set(p[0],p[1]);
@@ -2956,7 +3139,7 @@ $('db_file').addEventListener('change',e=>{
         await put('dias',d);
       }
       if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
-      await recarregar();montarMaquinas();montarTurnos();montarDia();montarAnalise();montarDados();
+      await recarregar();montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();montarDados();
       toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
     }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };
@@ -2964,10 +3147,168 @@ $('db_file').addEventListener('change',e=>{
 /* Apagar a base é diferente de limpar o relatório: aquele botão, na aba
    Análise, só limpa a tela. Este remove os registros importados. */
 $('db_del').addEventListener('click',async()=>{
-  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
+  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, catálogos, programação, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
   await clearS('dias');await montarDados();
   $('a_out').innerHTML='';$('a_vazio').style.display='block';$('relbox').classList.remove('on');LAST=null;
   toast('Registros de produção apagados')});
+
+/* === 84-catalogos.js === */
+/* 84-catalogos.js — Cadastro de catálogos e programação de catálogo por hora.
+
+   Um catálogo é o produto que a linha está rodando, e cada um tem a sua meta
+   em peças por hora. A meta usada num período não é mais um número fixo da
+   máquina: é a meta do catálogo que estava rodando em cada hora.
+
+   Cadeia de fallback, do mais específico para o mais geral:
+     1. catálogo programado para aquela hora;
+     2. catálogo padrão da máquina;
+     3. meta cadastrada na própria máquina. */
+"use strict";
+
+const catPorId=id=>CAT.find(c=>c.id===id)||null;
+const rotuloCat=c=>c?esc(c.numero)+(c.tipo?' · '+esc(c.tipo):''):'—';
+
+/* --- cadastro ------------------------------------------------------------ */
+function formCatalogo(c){
+  const novo=!c;
+  c=c||{id:uid(),numero:'',tipo:'',metaHora:90000,obs:''};
+  $('dlg_t').textContent=novo?'Cadastrar catálogo':'Editar catálogo';
+  $('dlg_p').textContent='A meta é sempre em peças por hora, e vale para as horas em que este catálogo estiver programado.';
+  $('dlg_b').innerHTML=`<div class="grid">
+    <div class="fld"><label for="f_cnum">Número do catálogo</label><input id="f_cnum" value="${esc(c.numero)}" placeholder="CAT-1024"></div>
+    <div class="fld"><label for="f_ctipo">Tipo do catálogo</label><input id="f_ctipo" value="${esc(c.tipo)}" placeholder="Blister 12un"></div>
+    <div class="fld"><label for="f_cmeta">Meta (peças/h)</label><input type="number" id="f_cmeta" value="${c.metaHora}" min="0" step="100"></div>
+  </div>
+  <div class="fld" style="margin-top:14px"><label for="f_cobs">Observação</label><textarea id="f_cobs" placeholder="particularidades de setup, formato, restrições...">${esc(c.obs||'')}</textarea></div>`;
+  $('dlg_f').innerHTML='';
+  const x=el('button','act');x.type='button';x.textContent='Cancelar';
+  x.addEventListener('click',()=>$('dlg').close());
+  const s=el('button','act pri');s.type='button';s.textContent='Salvar';
+  s.addEventListener('click',async()=>{
+    const numero=$('f_cnum').value.trim();
+    if(!numero){toast('Informe o número do catálogo');return}
+    const meta=+$('f_cmeta').value;
+    if(!(meta>0)){toast('A meta precisa ser maior que zero');return}
+    await put('catalogos',{id:c.id,numero,tipo:$('f_ctipo').value.trim(),
+      metaHora:meta,obs:$('f_cobs').value.trim()});
+    $('dlg').close();await recarregar();
+    montarCatalogos();montarMaquinas();
+    if(LAST)await rodarAnalise();
+    toast('Catálogo salvo')});
+  $('dlg_f').append(x,s);$('dlg').showModal();
+}
+
+function montarCatalogos(){
+  const w=$('k_lista');
+  if(!CAT.length){
+    w.innerHTML='<div class="empty">Nenhum catálogo cadastrado. Sem catálogo, a meta usada é a que está no cadastro da máquina.</div>';
+    return;
+  }
+  w.innerHTML='';
+  for(const c of CAT){
+    const d=el('div','item');
+    const usos=MAQ.filter(m=>m.catalogoId===c.id).map(m=>m.nome);
+    d.innerHTML=`<span class="bar" style="background:var(--meta)"></span>
+      <div><div class="nm">${esc(c.numero)}${c.tipo?' <span class="tag">'+esc(c.tipo)+'</span>':''}</div>
+      <div class="ds">meta ${nf(c.metaHora)} peças/h${usos.length?' · padrão em '+esc(usos.join(', ')):''}</div>
+      ${c.obs?'<div class="ds" style="margin-top:3px;font-style:italic">'+esc(c.obs)+'</div>':''}</div><span class="sp"></span>`;
+    const e=el('button','act');e.type='button';e.textContent='Editar';
+    e.addEventListener('click',()=>formCatalogo(c));
+    const x=el('button','act dgr');x.type='button';x.textContent='Excluir';
+    x.addEventListener('click',async()=>{
+      if(!confirm('Excluir o catálogo '+c.numero+'?\n\nAs horas programadas com ele voltam a usar a meta da máquina. Nenhum registro de produção é apagado.'))return;
+      await del('catalogos',c.id);await recarregar();
+      montarCatalogos();montarMaquinas();
+      if(LAST)await rodarAnalise();
+      toast('Catálogo excluído')});
+    d.append(e,x);w.appendChild(d);
+  }
+}
+$('k_novo').addEventListener('click',()=>formCatalogo(null));
+
+/* --- seletor do painel de análise ---------------------------------------- */
+function montarSeletorCatalogo(){
+  const s=$('a_cat');if(!s)return;
+  const atual=s.value;
+  s.innerHTML='<option value="">— escolha um catálogo —</option>'
+    +CAT.map(c=>`<option value="${c.id}">${esc(c.numero)}${c.tipo?' · '+esc(c.tipo):''} — ${nf(c.metaHora)} peças/h</option>`).join('');
+  if(atual&&[...s.options].some(o=>o.value===atual))s.value=atual;
+}
+const optsCatalogo=sel=>'<option value="">—</option>'
+  +CAT.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.numero)}</option>`).join('');
+
+/* --- programação por hora ------------------------------------------------
+   Uma linha por máquina e dia, com um mapa de hora do dia para catálogo.
+   Mesmo formato de `dias`: ler um intervalo é um range da chave primária. */
+async function gravarHoras(maquinaId,alteracoes){
+  const porDia=new Map();
+  for(const {data,hora,catalogoId} of alteracoes){
+    if(!porDia.has(data))porDia.set(data,[]);
+    porDia.get(data).push([String(hora),catalogoId]);
+  }
+  for(const [data,pares] of porDia){
+    const chave=chaveProg(maquinaId,data);
+    const ex=await get1('programacao',chave);
+    const horas={...((ex&&ex.horas)||{})};
+    for(const [h,cid] of pares){if(cid)horas[h]=cid;else delete horas[h]}
+    if(Object.keys(horas).length)await put('programacao',{chave,maquinaId,data,horas});
+    else if(ex)await del('programacao',chave);
+  }
+}
+/* Lista das horas de relógio que tocam [ini,fim). */
+function horasDoPeriodo(ini,fim){
+  const out=[];const d=new Date(ini);d.setMinutes(0,0,0);
+  for(let t=d.getTime();t<fim;t+=3600000){
+    const h=new Date(t);
+    out.push({ms:t,data:iso(h),hora:h.getHours()});
+  }
+  return out;
+}
+async function aplicarCatalogoNoPeriodo(catalogoId){
+  if(!LAST){toast('Rode a análise primeiro');return}
+  if(!catalogoId){toast('Escolha um catálogo');return}
+  const maqs=LAST.AS.map(A=>A.maq);
+  const horas=horasDoPeriodo(LAST.ini,LAST.fim);
+  for(const m of maqs)
+    await gravarHoras(m.id,horas.map(h=>({data:h.data,hora:h.hora,catalogoId})));
+  await rodarAnalise();
+  toast(nf(horas.length)+' hora(s) programadas em '+maqs.length+' máquina(s)');
+}
+async function limparProgramacaoDoPeriodo(){
+  if(!LAST){toast('Rode a análise primeiro');return}
+  if(!confirm('Remover a programação de catálogo de todas as horas do período?\n\nAs horas voltam a usar o catálogo padrão da máquina. Nenhum registro de produção é apagado.'))return;
+  const horas=horasDoPeriodo(LAST.ini,LAST.fim);
+  for(const A of LAST.AS)
+    await gravarHoras(A.maq.id,horas.map(h=>({data:h.data,hora:h.hora,catalogoId:''})));
+  await rodarAnalise();
+  toast('Programação do período removida');
+}
+/* Edição de uma hora só, a partir da tabela de detalhe por hora. */
+async function definirCatalogoDaHora(maquinaId,ms,catalogoId){
+  const d=new Date(ms);
+  await gravarHoras(maquinaId,[{data:iso(d),hora:d.getHours(),catalogoId}]);
+  await rodarAnalise();
+  toast(catalogoId?'Catálogo aplicado às '+pad2(d.getHours())+'h':'Catálogo removido das '+pad2(d.getHours())+'h');
+}
+
+/* Monta o mapa hora -> meta que o motor de cálculo consome. */
+async function metaHorasDaMaquina(maq,deK,ateK){
+  const padraoCat=catPorId(maq.catalogoId);
+  const metaPadrao=padraoCat
+    ?{metaHora:padraoCat.metaHora,catalogoId:padraoCat.id,numero:padraoCat.numero,tipo:padraoCat.tipo}
+    :{metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,catalogoId:null,
+      numero:null,tipo:'meta da máquina'};
+  const metaHoras=new Map();
+  let progs=[];
+  try{progs=await programacaoDoIntervalo(maq.id,deK,ateK)}
+  catch(e){console.error('[monitor] programação não pôde ser lida',e)}
+  for(const p of progs)for(const [h,cid] of Object.entries(p.horas||{})){
+    const c=catPorId(cid);if(!c)continue;
+    metaHoras.set(p.data+'T'+pad2(h),
+      {metaHora:c.metaHora,catalogoId:c.id,numero:c.numero,tipo:c.tipo});
+  }
+  return{metaHoras,metaPadrao};
+}
 
 /* === 90-montagem.js === */
 /* 90-montagem.js — Ligação dos controles da aba Análise: máquinas, seções,
@@ -3055,6 +3396,8 @@ $('a_contagem').addEventListener('change',ajudaCalculo);
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
+$('a_cat_todas').addEventListener('click',()=>aplicarCatalogoNoPeriodo($('a_cat').value));
+$('a_cat_limpar').addEventListener('click',limparProgramacaoDoPeriodo);
 $('a_auto').addEventListener('change',e=>{
   if(e.target.checked)ligarAuto();
   else{pararAuto();PREFS.auto=false;salvarPrefs();$('a_autoinfo').textContent='Atualização automática desligada.'}
@@ -3078,14 +3421,14 @@ $('a_autoseg').addEventListener('change',()=>{if($('a_auto').checked)ligarAuto()
   const hoje=new Date();
   $('a_de').value=iso(new Date(hoje.getTime()-6*86400000));
   $('a_ate').value=iso(hoje);$('d_data').value=iso(hoje);
-  montarMaquinas();montarTurnos();montarDia();montarAnalise();
+  montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();
   await montarDados();
   PRONTO=true;
   if(!MAQ.length){
     await put('maquinas',{id:uid(),nome:'VAEB 01',etapa:'Packout',modo:'lote',porInc:1000,unid:'caixa',
       meta:90000,cap:115000,offset:1,cor:PAL[0],
       obs:'Contador registra caixa fechada; a contagem do lote abre em 1 mostrando a próxima caixa.'});
-    await recarregar();montarMaquinas();montarAnalise();montarDia();await montarDados();
+    await recarregar();montarMaquinas();montarAnalise();montarDia();montarCatalogos();await montarDados();
     mostrar('maquinas');toast('Criei a VAEB 01 como ponto de partida — edite ou adicione as outras');
   }
   if(PREFS.auto){$('a_auto').checked=true;ligarAuto()}
