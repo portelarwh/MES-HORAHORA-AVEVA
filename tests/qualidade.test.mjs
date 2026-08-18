@@ -86,13 +86,13 @@ test('turnos sobrepostos e ausência de turnos chegam ao painel', () => {
 test('preferências: padrão completo, mescla defensiva e descarte de chave morta', () => {
   const p = A.prefsPadrao();
   assert.equal(Object.keys(p.cards).length, A.CARDS.length);
-  assert.equal(p.base, 'programado');
+  assert.equal(p.base, 'marcacoes', 'o padrão passou a ser a janela da primeira à última marcação');
   const m = A.mesclaPrefs(p, { base: 'inexistente', limParada: -1, cards: { producao: false, zumbi: true } });
-  assert.equal(m.base, 'programado', 'base inválida cai no padrão');
+  assert.equal(m.base, 'marcacoes', 'base inválida cai no padrão');
   assert.equal(m.limParada, p.limParada, 'limiar inválido cai no padrão');
   assert.equal(m.cards.producao, false, 'a escolha do usuário é preservada');
   assert.equal('zumbi' in m.cards, false, 'card que não existe mais é descartado');
-  assert.equal(A.mesclaPrefs(p, null).base, 'programado');
+  assert.equal(A.mesclaPrefs(p, null).base, 'marcacoes');
 });
 
 test('todo card do catálogo tem rótulo e grupo', () => {

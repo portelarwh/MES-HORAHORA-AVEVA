@@ -30,8 +30,10 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Filtros rápidos | Turno atual, hoje, ontem, últimas 24 h, últimos 7 dias, este mês. |
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade e meta em peças por hora. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
-| Meta proporcional | A meta acompanha a base escolhida: meia hora de análise cobra meia hora de meta. |
-| OEE em quatro leituras | Programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
+| Meta proporcional | A meta acompanha a base escolhida. Por padrão a base vai da primeira à última marcação do contador — a linha começa a produzir quando a primeira caixa é contada, não quando o relógio do filtro vira. |
+| OEE em cinco leituras | Entre marcações (padrão), programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
+| Contador de próxima unidade | A leitura do historian indica a **próxima** caixa: leitura 21 com contagem iniciando em 1 são 20 caixas prontas. O cartão “Contagem do contador” mostra as leituras para conferência contra o painel da máquina. |
+| Turno de limpeza | O turno desconsiderado entrega sua produção ao turno seguinte sem entregar as horas: quem recebe as caixas adiantadas conta a produção e continua medido pelo próprio horário cadastrado. |
 | Parada ≠ ausência de dados | Dois limiares separam “a máquina parou” de “o historian não gravou”. Falta de dado nunca vira parada. |
 | Qualidade dos dados | Cobertura, resets, deltas maiores que 1, registros sem alteração, carimbos repetidos ou fora de ordem, produção não atribuída — com classificação e painel de validação. |
 | Registros individuais | Cada marcação do contador com o carimbo original, delta, intervalo e classificação. Expansão por hora mostra só os registros daquela janela. |
@@ -116,13 +118,35 @@ ocorrências são geradas dia a dia, recortadas na janela selecionada e garantid
 sem sobreposição — nenhum registro entra em dois turnos. Cada linha traz o status:
 fechado, em andamento, ainda não começou, recortado pelo filtro ou sem dados.
 
-### Turno desconsiderado
+### O contador indica a próxima caixa
 
-O seletor **“Turno desconsiderado”** faz o turno escolhido deixar de existir como
-linha: sua janela é absorvida pelo turno cronologicamente seguinte, marcado como
-*turno anexado*. Caixas fechadas às 05h30 com o 1º turno começando às 06h00 vão
-para o 3º turno no modo normal, e para o 1º turno quando o 3º é desconsiderado —
-sem virar hora extra e sem perder nenhum minuto do período.
+A leitura do historian não diz quantas caixas ficaram prontas: diz **qual é a
+próxima**. Com a contagem iniciando em 1, a leitura `1` significa nenhuma caixa
+concluída e a leitura `21` significa 20. O campo *“Contador indica a próxima —
+contagem inicia em”*, no cadastro da máquina, guarda esse valor; ele é aplicado
+em todo reinício de contagem e aparece no cartão **Contagem do contador**, com a
+primeira e a última leitura do período.
+
+Em resumo: a primeira marcação não é o início da produção, é a contagem da
+primeira peça.
+
+### Turno desconsiderado — o turno de limpeza
+
+O seletor **“Turno desconsiderado”** existe para o turno que não é produtivo. Ele
+deixa de existir como linha do fechamento, e a regra tem duas metades:
+
+- a **produção** dele vai para o turno seguinte — as caixas adiantadas são
+  trabalho entregue e pertencem a quem recebe o turno;
+- as **horas** dele **não** vão — cobrar meta e OEE por horas de limpeza puniria
+  o turno seguinte por um tempo em que ninguém deveria estar produzindo.
+
+Se o pessoal do 3º turno fecha 20 caixas entre 05:00 e 06:00, o 1º turno começa
+com 20 na conta e continua sendo medido das 06:00 às 14:20. A linha recebe a
+marca *+ turno anexado* e a coluna **Adiantadas** mostra quantas vieram de antes.
+
+Consequência: com um turno desconsiderado, a soma das horas do fechamento fica
+menor que o período, exatamente pelas horas retiradas. A soma das caixas continua
+igual — nada é duplicado nem perdido.
 
 ### Os tempos
 
@@ -133,9 +157,10 @@ tempo sem dados     = período − tempo com dados          (nunca é parada)
 tempo parado        = intervalos entre os dois limiares
 ```
 
-E as quatro bases: `programado` (período − abono), `observado` (com dados −
-abono), `operacional` (observado − paradas) e `parcial` (início do período até a
-última marcação − abono).
+E as cinco bases: `marcações` (primeira → última marcação − abono, **padrão**),
+`programado` (período − abono), `observado` (com dados − abono), `operacional`
+(observado − paradas) e `parcial` (início do período até a última marcação −
+abono).
 
 ### Produção, meta e OEE
 
@@ -149,6 +174,7 @@ OEE                = peças ÷ planejado
 
 | Leitura | Base do denominador |
 | --- | --- |
+| OEE entre marcações | primeira → última marcação − abono |
 | OEE programado | período selecionado − abono |
 | OEE observado | tempo com dados − abono |
 | OEE operacional | observado − paradas detectadas |

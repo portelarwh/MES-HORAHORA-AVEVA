@@ -163,23 +163,36 @@ function lancDe(ajustes,id,a,b,pc){
   return r;
 }
 
-/* --- núcleo: métricas de um recorte [a,b) ------------------------------- */
-function metricas(A,a,b){
+/* --- núcleo: métricas de um recorte -------------------------------------
+   Duas janelas, que normalmente coincidem:
+
+     [a, b)          janela de TEMPO — é o denominador de meta e OEE
+     [pa, pb)        janela de PRODUÇÃO — é o numerador
+
+   Elas se separam no fechamento de turno com turno anexado. O operador que
+   recebe as caixas adiantadas pelo turno de limpeza conta essa produção, mas
+   continua sendo medido pelo horário cadastrado do próprio turno. Sem essa
+   separação, as horas do turno anexado entrariam no denominador e afundariam
+   o OEE de quem apenas herdou o trabalho. */
+function metricas(A,a,b,prod){
   const c=A.maq,pc=A.pc;
-  let inc=0,regs=0,naoAtrib=0,semAlt=0,resets=0,ultimoReg=null,primeiroReg=null;
+  const pa=prod&&prod.a!=null?prod.a:a, pb=prod&&prod.b!=null?prod.b:b;
+  let inc=0,incAbsorvido=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
+  let ultimoReg=null,primeiroReg=null,leituraIni=null,leituraFim=null;
   for(const e of A.eventos){
-    if(e.t<a||e.t>=b)continue;
-    if(e.contabiliza)inc+=e.delta;else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.t<pa||e.t>=pb)continue;
+    if(e.contabiliza){inc+=e.delta;if(e.t<a)incAbsorvido+=e.delta}
+    else if(e.delta>0)naoAtrib+=e.delta;
     if(e.delta===0)semAlt++;
     if(e.reset)resets++;
   }
   for(const p of A.dentro){
-    if(p[0]<a||p[0]>=b)continue;
+    if(p[0]<pa||p[0]>=pb)continue;
     regs++;
-    if(primeiroReg==null)primeiroReg=p[0];
-    ultimoReg=p[0];
+    if(primeiroReg==null){primeiroReg=p[0];leituraIni=p[1]}
+    ultimoReg=p[0];leituraFim=p[1];
   }
-  const dur=(b-a)/60000;
+  const dur=Math.max(0,(b-a)/60000);
   const comDados=ovlSegs(A.cobertura,a,b);
   const semDados=Math.max(0,dur-comDados);
   const parado=ovlSegs(A.paradas,a,b);
@@ -193,12 +206,22 @@ function metricas(A,a,b){
   const programado=Math.max(0,dur-abono);
   const observado=Math.max(0,comDados-abonoCoberto);
   const operacional=Math.max(0,observado-parado);
+  /* Parcial: do início do recorte de tempo até a última marcação. Serve para
+     turno em andamento — não cobra horas que ainda não aconteceram. */
   let parcial=null;
-  if(ultimoReg!=null){
+  if(ultimoReg!=null&&ultimoReg>a){
     const abonoAte=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,a,ultimoReg),0);
-    parcial=Math.max(0,(ultimoReg-a)/60000-abonoAte);
+    parcial=Math.max(0,(Math.min(ultimoReg,b)-a)/60000-abonoAte);
   }
-  const tempos={programado,observado,operacional,parcial};
+  /* Marcações: da primeira à última marcação do contador. É a base que
+     corresponde ao comportamento real da linha — a produção começa quando a
+     primeira caixa é contada, não quando o relógio do filtro vira. */
+  let marcacoes=null;
+  if(primeiroReg!=null&&ultimoReg!=null&&ultimoReg>primeiroReg){
+    const abonoEntre=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,primeiroReg,ultimoReg),0);
+    marcacoes=Math.max(0,(ultimoReg-primeiroReg)/60000-abonoEntre);
+  }
+  const tempos={marcacoes,programado,observado,operacional,parcial};
 
   const pcs=inc*pc;
   const bom=Math.max(0,pcs-L.refugo-L.retrab);
@@ -210,11 +233,13 @@ function metricas(A,a,b){
     oee[k]=razao(pcs,planCap[k]);
     ating[k]=razao(pcs,planMeta[k]);
   }
-  const base=A.base||'programado';
-  return{a,b,dur,inc,regs,naoAtrib,semAlt,resets,nPar,nLac,
+  const base=tempos[A.base]!==undefined?A.base:'marcacoes';
+  return{a,b,pa,pb,dur,inc,incAbsorvido,pcsAbsorvido:incAbsorvido*pc,
+    regs,naoAtrib,semAlt,resets,nPar,nLac,
+    leituraIni,leituraFim,contagemInicial:c.offset||0,
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
-    programado,observado,operacional,parcial,tempos,
+    marcacoes,programado,observado,operacional,parcial,tempos,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -230,7 +255,14 @@ function metricas(A,a,b){
 /* --- turnos -------------------------------------------------------------- */
 /* Gera as ocorrências dos turnos que tocam [ini,fim), recortadas na janela.
    Garante que nenhuma ocorrência se sobreponha a outra — sem isso o mesmo
-   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada. */
+   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada.
+
+   Turno desconsiderado: a ocorrência escolhida deixa de existir como linha e
+   sua PRODUÇÃO é absorvida pelo turno cronologicamente seguinte, que continua
+   sendo medido pelo próprio horário cadastrado. É o caso do turno de limpeza
+   que adianta caixas para o turno seguinte: o operador do primeiro turno já
+   começa com essas caixas, mas o turno dele continua valendo das 06:00 às
+   14:20 para efeito de meta e OEE. */
 function turnosNoIntervalo(turnos,ini,fim,excluirId){
   if(!turnos||!turnos.length)return[];
   const out=[];
@@ -256,16 +288,28 @@ function turnosNoIntervalo(turnos,ini,fim,excluirId){
       if(lista[i].turnoId!==excluirId){keep.push(lista[i]);continue}
       let j=i+1;
       while(j<lista.length&&lista[j].turnoId===excluirId)j++;
-      if(j<lista.length){lista[j].a=Math.min(lista[j].a,lista[i].a);lista[j].anexado=true}
-      else if(keep.length){const u=keep[keep.length-1];u.b=Math.max(u.b,lista[i].b);u.anexado=true}
+      if(j<lista.length){
+        const alvo=lista[j];
+        alvo.aProd=Math.min(alvo.aProd==null?alvo.a:alvo.aProd,lista[i].a);
+        alvo.anexado=true;alvo.minAnexados=(alvo.minAnexados||0)+(lista[j-1].b-lista[i].a)/60000;
+      }else if(keep.length){
+        const u=keep[keep.length-1];
+        u.bProd=Math.max(u.bProd==null?u.b:u.bProd,lista[lista.length-1].b);
+        u.anexado=true;u.minAnexados=(u.minAnexados||0)+(lista[lista.length-1].b-lista[i].a)/60000;
+      }
       i=j-1;
     }
     lista=keep;
   }
-  return lista.filter(x=>x.b>ini&&x.a<fim).map(x=>({...x,
-    aCheio:x.a,bCheio:x.b,
-    a:Math.max(x.a,ini),b:Math.min(x.b,fim),
-    recortado:x.a<ini||x.b>fim}));
+  return lista.map(x=>{
+    const aP=x.aProd==null?x.a:x.aProd,bP=x.bProd==null?x.b:x.bProd;
+    const a=Math.max(x.a,ini),b=Math.min(x.b,fim);
+    return{...x,aCheio:x.a,bCheio:x.b,aProdCheio:aP,bProdCheio:bP,
+      a,b:Math.max(a,b),                       // janela de tempo, possivelmente vazia
+      aProd:Math.max(aP,ini),bProd:Math.min(bP,fim),
+      recortado:x.a<ini||x.b>fim,
+      soProducao:b<=a};                        // o turno em si está fora da janela
+  }).filter(x=>x.b>x.a||x.bProd>x.aProd);
 }
 
 /* --- recortes de período ------------------------------------------------- */

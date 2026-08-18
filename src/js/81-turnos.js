@@ -41,12 +41,14 @@ $('t_padrao').addEventListener('click',async()=>{
   await recarregar();montarTurnos();toast('Três turnos criados — ajuste os horários se precisar')});
 
 /* Regra do turno desconsiderado: a ocorrência escolhida deixa de existir como
-   linha e sua janela é absorvida pelo turno cronologicamente seguinte, sem que
-   nenhum registro seja contado duas vezes. A escolha fica salva nas preferências. */
+   linha e sua PRODUÇÃO é absorvida pelo turno seguinte, que continua sendo
+   medido pelo próprio horário cadastrado. É o caso do turno de limpeza que
+   adianta caixas: o turno seguinte já começa com elas, sem herdar as horas.
+   A escolha fica salva nas preferências. */
 function montarBorda(){
   const s=$('a_borda'),atual=s.value||PREFS.borda||'todos';
   s.innerHTML='<option value="todos">Manter cada turno cadastrado</option>'
-    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
+    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — produção vai para o turno seguinte</option>`).join('');
   s.value=[...s.options].some(o=>o.value===atual)?atual:'todos';
   PREFS.borda=s.value;
 }

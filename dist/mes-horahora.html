@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v4.0.0 · build 2026-08-18 -->
+  <!-- MES Hora a Hora — AVEVA · v4.1.0 · build 2026-08-18 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -623,6 +623,7 @@ const CARDS=[
   ['ultimo','Última marcação','Período',1],
   ['periodo','Período selecionado','Período',1],
   ['dados','Tempo com dados','Período',1],
+  ['contagem','Contagem do contador','Produção',1],
   ['semdados','Tempo sem dados','Período',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
@@ -630,6 +631,7 @@ const CARDS=[
   ['oeeobs','OEE observado','Desempenho',0],
   ['oeeoper','OEE operacional','Desempenho',0],
   ['oeeparcial','OEE parcial','Desempenho',1],
+  ['oeemarc','OEE entre marcações','Desempenho',0],
   ['parado','Tempo parado','Paradas',1],
   ['disp','Disponibilidade','Paradas',0],
   ['ritmo','Ritmo médio','Cadência',1],
@@ -651,6 +653,7 @@ const OPCOES=[
 /* Bases de cálculo. O rótulo aparece nos cards e no relatório, para que o
    número nunca fique sem dizer contra o que foi medido. */
 const BASES=[
+  ['marcacoes','Da primeira à última marcação','tempo entre o primeiro e o último registro do contador, menos abono — a produção começa quando a primeira caixa é contada'],
   ['programado','Período selecionado','duração do período menos abono'],
   ['observado','Janela com dados','tempo coberto pelos registros menos abono'],
   ['operacional','Tempo rodando','tempo com dados menos abono e menos paradas'],
@@ -663,7 +666,7 @@ function prefsPadrao(){
   const cards={},secoes={};
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
-  return{v:PREFS_VER,cards,secoes,base:'programado',gran:'hora',tipo:'auto',
+  return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
     limParada:3,limSemDados:30,borda:'todos',auto:false,autoSeg:120,
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
@@ -1030,23 +1033,36 @@ function lancDe(ajustes,id,a,b,pc){
   return r;
 }
 
-/* --- núcleo: métricas de um recorte [a,b) ------------------------------- */
-function metricas(A,a,b){
+/* --- núcleo: métricas de um recorte -------------------------------------
+   Duas janelas, que normalmente coincidem:
+
+     [a, b)          janela de TEMPO — é o denominador de meta e OEE
+     [pa, pb)        janela de PRODUÇÃO — é o numerador
+
+   Elas se separam no fechamento de turno com turno anexado. O operador que
+   recebe as caixas adiantadas pelo turno de limpeza conta essa produção, mas
+   continua sendo medido pelo horário cadastrado do próprio turno. Sem essa
+   separação, as horas do turno anexado entrariam no denominador e afundariam
+   o OEE de quem apenas herdou o trabalho. */
+function metricas(A,a,b,prod){
   const c=A.maq,pc=A.pc;
-  let inc=0,regs=0,naoAtrib=0,semAlt=0,resets=0,ultimoReg=null,primeiroReg=null;
+  const pa=prod&&prod.a!=null?prod.a:a, pb=prod&&prod.b!=null?prod.b:b;
+  let inc=0,incAbsorvido=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
+  let ultimoReg=null,primeiroReg=null,leituraIni=null,leituraFim=null;
   for(const e of A.eventos){
-    if(e.t<a||e.t>=b)continue;
-    if(e.contabiliza)inc+=e.delta;else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.t<pa||e.t>=pb)continue;
+    if(e.contabiliza){inc+=e.delta;if(e.t<a)incAbsorvido+=e.delta}
+    else if(e.delta>0)naoAtrib+=e.delta;
     if(e.delta===0)semAlt++;
     if(e.reset)resets++;
   }
   for(const p of A.dentro){
-    if(p[0]<a||p[0]>=b)continue;
+    if(p[0]<pa||p[0]>=pb)continue;
     regs++;
-    if(primeiroReg==null)primeiroReg=p[0];
-    ultimoReg=p[0];
+    if(primeiroReg==null){primeiroReg=p[0];leituraIni=p[1]}
+    ultimoReg=p[0];leituraFim=p[1];
   }
-  const dur=(b-a)/60000;
+  const dur=Math.max(0,(b-a)/60000);
   const comDados=ovlSegs(A.cobertura,a,b);
   const semDados=Math.max(0,dur-comDados);
   const parado=ovlSegs(A.paradas,a,b);
@@ -1060,12 +1076,22 @@ function metricas(A,a,b){
   const programado=Math.max(0,dur-abono);
   const observado=Math.max(0,comDados-abonoCoberto);
   const operacional=Math.max(0,observado-parado);
+  /* Parcial: do início do recorte de tempo até a última marcação. Serve para
+     turno em andamento — não cobra horas que ainda não aconteceram. */
   let parcial=null;
-  if(ultimoReg!=null){
+  if(ultimoReg!=null&&ultimoReg>a){
     const abonoAte=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,a,ultimoReg),0);
-    parcial=Math.max(0,(ultimoReg-a)/60000-abonoAte);
+    parcial=Math.max(0,(Math.min(ultimoReg,b)-a)/60000-abonoAte);
   }
-  const tempos={programado,observado,operacional,parcial};
+  /* Marcações: da primeira à última marcação do contador. É a base que
+     corresponde ao comportamento real da linha — a produção começa quando a
+     primeira caixa é contada, não quando o relógio do filtro vira. */
+  let marcacoes=null;
+  if(primeiroReg!=null&&ultimoReg!=null&&ultimoReg>primeiroReg){
+    const abonoEntre=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,primeiroReg,ultimoReg),0);
+    marcacoes=Math.max(0,(ultimoReg-primeiroReg)/60000-abonoEntre);
+  }
+  const tempos={marcacoes,programado,observado,operacional,parcial};
 
   const pcs=inc*pc;
   const bom=Math.max(0,pcs-L.refugo-L.retrab);
@@ -1077,11 +1103,13 @@ function metricas(A,a,b){
     oee[k]=razao(pcs,planCap[k]);
     ating[k]=razao(pcs,planMeta[k]);
   }
-  const base=A.base||'programado';
-  return{a,b,dur,inc,regs,naoAtrib,semAlt,resets,nPar,nLac,
+  const base=tempos[A.base]!==undefined?A.base:'marcacoes';
+  return{a,b,pa,pb,dur,inc,incAbsorvido,pcsAbsorvido:incAbsorvido*pc,
+    regs,naoAtrib,semAlt,resets,nPar,nLac,
+    leituraIni,leituraFim,contagemInicial:c.offset||0,
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
-    programado,observado,operacional,parcial,tempos,
+    marcacoes,programado,observado,operacional,parcial,tempos,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -1097,7 +1125,14 @@ function metricas(A,a,b){
 /* --- turnos -------------------------------------------------------------- */
 /* Gera as ocorrências dos turnos que tocam [ini,fim), recortadas na janela.
    Garante que nenhuma ocorrência se sobreponha a outra — sem isso o mesmo
-   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada. */
+   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada.
+
+   Turno desconsiderado: a ocorrência escolhida deixa de existir como linha e
+   sua PRODUÇÃO é absorvida pelo turno cronologicamente seguinte, que continua
+   sendo medido pelo próprio horário cadastrado. É o caso do turno de limpeza
+   que adianta caixas para o turno seguinte: o operador do primeiro turno já
+   começa com essas caixas, mas o turno dele continua valendo das 06:00 às
+   14:20 para efeito de meta e OEE. */
 function turnosNoIntervalo(turnos,ini,fim,excluirId){
   if(!turnos||!turnos.length)return[];
   const out=[];
@@ -1123,16 +1158,28 @@ function turnosNoIntervalo(turnos,ini,fim,excluirId){
       if(lista[i].turnoId!==excluirId){keep.push(lista[i]);continue}
       let j=i+1;
       while(j<lista.length&&lista[j].turnoId===excluirId)j++;
-      if(j<lista.length){lista[j].a=Math.min(lista[j].a,lista[i].a);lista[j].anexado=true}
-      else if(keep.length){const u=keep[keep.length-1];u.b=Math.max(u.b,lista[i].b);u.anexado=true}
+      if(j<lista.length){
+        const alvo=lista[j];
+        alvo.aProd=Math.min(alvo.aProd==null?alvo.a:alvo.aProd,lista[i].a);
+        alvo.anexado=true;alvo.minAnexados=(alvo.minAnexados||0)+(lista[j-1].b-lista[i].a)/60000;
+      }else if(keep.length){
+        const u=keep[keep.length-1];
+        u.bProd=Math.max(u.bProd==null?u.b:u.bProd,lista[lista.length-1].b);
+        u.anexado=true;u.minAnexados=(u.minAnexados||0)+(lista[lista.length-1].b-lista[i].a)/60000;
+      }
       i=j-1;
     }
     lista=keep;
   }
-  return lista.filter(x=>x.b>ini&&x.a<fim).map(x=>({...x,
-    aCheio:x.a,bCheio:x.b,
-    a:Math.max(x.a,ini),b:Math.min(x.b,fim),
-    recortado:x.a<ini||x.b>fim}));
+  return lista.map(x=>{
+    const aP=x.aProd==null?x.a:x.aProd,bP=x.bProd==null?x.b:x.bProd;
+    const a=Math.max(x.a,ini),b=Math.min(x.b,fim);
+    return{...x,aCheio:x.a,bCheio:x.b,aProdCheio:aP,bProdCheio:bP,
+      a,b:Math.max(a,b),                       // janela de tempo, possivelmente vazia
+      aProd:Math.max(aP,ini),bProd:Math.min(bP,fim),
+      recortado:x.a<ini||x.b>fim,
+      soProducao:b<=a};                        // o turno em si está fora da janela
+  }).filter(x=>x.b>x.a||x.bProd>x.aProd);
 }
 
 /* --- recortes de período ------------------------------------------------- */
@@ -1219,6 +1266,17 @@ function validacoes(A,t,ctx){
   if(q.duplicados>0)
     add('aten','DUPLICADO',nf(q.duplicados)+' carimbos repetidos',
       'Carimbos iguais foram mesclados, prevalecendo o último valor lido. Reimportação do mesmo período não duplica produção.');
+
+  /* O contador indica a próxima unidade: leitura igual ao início da contagem
+     significa nada produzido ainda, e não uma unidade pronta. */
+  if(t.leituraIni!=null&&c.offset>0&&t.leituraIni===c.offset)
+    add('info','CONTAGEM','O período começa no início da contagem',
+      'A primeira leitura é '+nf(t.leituraIni)+', igual ao início cadastrado. Como o contador indica a próxima unidade, '
+      +'nada havia sido produzido nesse instante.');
+  if(t.incAbsorvido>0)
+    add('info','ANTECIPADA',nf(t.incAbsorvido)+' incrementos adiantados absorvidos',
+      'Vieram de antes do início do turno, pelo turno desconsiderado. Entram na produção deste turno, '
+      +'mas as horas do turno anexado não entram no denominador da meta nem do OEE.');
 
   if(q.resets>0)
     add('info','RESET',nf(q.resets)+' reinícios de contagem',
@@ -1316,13 +1374,19 @@ function guardarFiltros(){
 let ASSINATURA='';
 const assinaturaDe=AS=>AS.map(A=>A.maq.id+':'+A.pts.length+':'+(A.pts.length?A.pts[A.pts.length-1][0]:0)).join('|');
 
+/* Quando o turno em si está fora da janela mas ele absorveu caixas adiantadas
+   que estão dentro, a linha existe só para mostrar essa produção — sem tempo,
+   não há meta nem OEE a calcular. */
 function statusTurno(bk,t,agora){
+  if(bk.soProducao)return{k:'antecipada',rot:'Produção antecipada'};
   if(bk.bCheio>agora&&bk.aCheio<=agora)return{k:'andamento',rot:'Em andamento'};
   if(bk.aCheio>agora)return{k:'futuro',rot:'Ainda não começou'};
   if(!t.regs)return{k:'semdados',rot:'Sem dados'};
   if(bk.recortado)return{k:'parcial',rot:'Recortado pelo filtro'};
   return{k:'completo',rot:'Fechado'};
 }
+/* Recorte de tempo e recorte de produção podem divergir (turno anexado). */
+const medir=(A,bk)=>metricas(A,bk.a,bk.b,bk.aProd==null?null:{a:bk.aProd,b:bk.bProd});
 
 async function rodarAnalise(opts){
   opts=opts||{};
@@ -1364,10 +1428,12 @@ async function rodarAnalise(opts){
 
   for(const A of AS){
     A.tot=metricas(A,J.ini,J.fim);
-    A.linhas=B.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.horas=BH.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.turnos=BT.map(bk=>{const m=metricas(A,bk.a,bk.b);
-      return{bk,...m,status:statusTurno(bk,m,agora)}});
+    A.linhas=B.map(bk=>({bk,...medir(A,bk)}));
+    A.horas=BH.map(bk=>({bk,...medir(A,bk)}));
+    A.turnos=BT.map(bk=>{const m=medir(A,bk);
+      return{bk,...m,status:statusTurno(bk,m,agora)}})
+      /* linha só de produção antecipada sem nenhuma caixa é ruído */
+      .filter(l=>!(l.bk.soProducao&&!l.regs));
     A.qual=qualidade(A,A.tot);
     A.valid=validacoes(A,A.tot,ctx);
   }
@@ -1434,7 +1500,17 @@ function cardsDe(A){
     tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
   const M={
     producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
-      eqInc+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+      eqInc
+      +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
+      +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    /* O contador do historian indica a PRÓXIMA unidade: a leitura 21 significa
+       20 caixas concluídas. Este cartão existe para o operador conferir isso
+       contra o painel da máquina. */
+    contagem:()=>['contagem','Contagem do contador',
+      t.leituraFim==null?NAO_CALC:nf(t.leituraFim),
+      t.leituraIni==null?'sem leitura no período':'primeira leitura '+nf(t.leituraIni),'c',
+      'a leitura indica a próxima '+esc(u)+' · contagem inicia em '+nf(t.contagemInicial)
+      +' · '+plural(t.inc,u)+' concluída'+(t.inc===1?'':'s')+' no período'],
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -1460,6 +1536,9 @@ function cardsDe(A){
     oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
     oeeparcial:()=>oeeCard('oeeparcial','OEE parcial',t.oee.parcial,t.parcial,
       t.ultimoReg==null?'sem registro no período':'do início do período até '+dtBR(t.ultimoReg,'min')),
+    oeemarc:()=>oeeCard('oeemarc','OEE entre marcações',t.oee.marcacoes,t.marcacoes,
+      t.primeiroReg==null?'sem registro no período'
+        :dtBR(t.primeiroReg,'min')+' → '+dtBR(t.ultimoReg,'min')),
     parado:()=>['parado','Tempo parado',fmtMin(t.parado),
       t.nPar+' parada'+(t.nPar===1?'':'s')+' acima de '+nf1(A.limParadaMin)+' min',
       cl(alvo(t.disp,1)),'disponibilidade '+fmtPct(t.disp)],
@@ -1510,37 +1589,45 @@ function seta(atual,ant){
 const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
 
 /* --- fechamento por turno ------------------------------------------------ */
+/* Duas janelas por linha: a produção pode vir de antes do turno (caixas
+   adiantadas pelo turno anexado), mas o tempo é sempre o horário cadastrado. */
 function tabelaTurnos(A){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
     +'<th rowspan="2">Turno</th><th rowspan="2">Status</th>'
-    +'<th class="grp" colspan="2">Produção</th>'
+    +'<th class="grp" colspan="3">Produção</th>'
     +'<th class="grp" colspan="4">Tempo (h)</th>'
-    +'<th class="grp" colspan="3">OEE</th>'
+    +'<th class="grp" colspan="4">OEE</th>'
     +'<th rowspan="2">Meta</th><th rowspan="2">Qualidade</th></tr><tr>'
-    +`<th class="sep">${u}</th><th>Peças</th>`
+    +`<th class="sep">${u}</th><th>Peças</th><th>Adiantadas</th>`
     +'<th class="sep">No período</th><th>Com dados</th><th>Sem dados</th><th>Parado</th>'
-    +'<th class="sep">Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
-  const T={inc:0,pcs:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,mProg:0};
-  if(!A.turnos.length)h+='<tr><td colspan="12" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
+    +'<th class="sep">Marcações</th><th>Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
+  const T={inc:0,pcs:0,ant:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,pMarc:0,mBase:0};
+  const st=k=>k==='completo'?'g':k==='semdados'?'r':k==='antecipada'?'n':'w';
+  if(!A.turnos.length)h+='<tr><td colspan="14" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
   for(const l of A.turnos){
     h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}`
       +`${l.bk.anexado?' <span class="tag">+ turno anexado</span>':''}`
-      +`${l.bk.recortado?' <span class="tag">recortado</span>':''}</td>`
-      +`<td style="text-align:left"><span class="pill p-${l.status.k==='completo'?'g':l.status.k==='semdados'?'r':'w'}">${l.status.rot}</span></td>`
+      +`${l.bk.recortado&&!l.bk.soProducao?' <span class="tag">recortado</span>':''}</td>`
+      +`<td style="text-align:left"><span class="pill p-${st(l.status.k)}">${l.status.rot}</span></td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
+      +`<td>${l.incAbsorvido>0?nf(l.incAbsorvido):'—'}</td>`
       +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
-      +`<td class="sep">${pill(l.oee.programado,.85)}</td><td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td class="sep">${pill(l.oee.marcacoes,.85)}</td><td>${pill(l.oee.programado,.85)}</td>`
+      +`<td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
       +`<td>${pill(l.atingBase)}</td>`
       +`<td>${fmtPct(l.cobertura)}</td></tr>`;
-    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.dur;T.com+=l.comDados;T.sem+=l.semDados;T.par+=l.parado;
-    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;T.mProg+=l.planMetaBase||0;
+    T.inc+=l.inc;T.pcs+=l.pcs;T.ant+=l.incAbsorvido;T.dur+=l.dur;T.com+=l.comDados;
+    T.sem+=l.semDados;T.par+=l.parado;
+    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;
+    T.pMarc+=l.planCap.marcacoes||0;T.mBase+=l.planMetaBase||0;
   }
   return h+`</tbody><tfoot><tr><td>Total geral</td><td></td>`
-    +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td>`
+    +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td><td>${T.ant>0?nf(T.ant):'—'}</td>`
     +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.com)}</td><td>${hDur(T.sem)}</td><td>${fmtMin(T.par)}</td>`
-    +`<td class="sep">${pct(T.pcs,T.pProg)}</td><td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
-    +`<td>${pct(T.pcs,T.mProg)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
+    +`<td class="sep">${pct(T.pcs,T.pMarc)}</td><td>${pct(T.pcs,T.pProg)}</td>`
+    +`<td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
+    +`<td>${pct(T.pcs,T.mBase)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
 }
 
 /* --- qualidade e validação ---------------------------------------------- */
@@ -1578,6 +1665,9 @@ function rastreabilidade(A){
   const L=[
     ['Peças produzidas','incrementos × peças por incremento',
       nf(t.inc)+' × '+nf(A.pc),nf(t.pcs)+' peças'],
+    ['Leitura do contador','a leitura indica a próxima unidade',
+      fmtVal(t.leituraIni)+' → '+fmtVal(t.leituraFim)+' · inicia em '+nf(t.contagemInicial),
+      nf(t.inc)+' concluídas'],
     ['Período selecionado','fim − início',
       dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
     ['Tempo com dados','período − tempo sem dados',
@@ -1590,6 +1680,8 @@ function rastreabilidade(A){
       hDur(t.observado)+' − '+fmtMin(t.parado),hDur(t.operacional)],
     ['Tempo parcial','última marcação − início do período − abono',
       t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.a,'min'),hDur(t.parcial)],
+    ['Tempo entre marcações','última marcação − primeira marcação − abono',
+      t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
     ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
       nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
     ['Atingimento','peças ÷ meta proporcional',
@@ -1606,6 +1698,8 @@ function rastreabilidade(A){
       nf(t.pcs)+' ÷ '+fmtVal(t.planCap.operacional),fmtPct(t.oee.operacional)],
     ['OEE parcial','peças ÷ (capacidade × parcial ÷ 60)',
       nf(t.pcs)+' ÷ '+fmtVal(t.planCap.parcial),fmtPct(t.oee.parcial)],
+    ['OEE entre marcações','peças ÷ (capacidade × marcações ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.marcacoes),fmtPct(t.oee.marcacoes)],
     ['Disponibilidade','operacional ÷ observado',
       hDur(t.operacional)+' ÷ '+hDur(t.observado),fmtPct(t.disp)],
     ['Cobertura de dados','tempo com dados ÷ período',
@@ -2176,8 +2270,8 @@ function relatorioA4(){
       +'<th>Com dados</th><th>OEE</th><th>Parcial</th></tr></thead><tbody>'
       +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td>`
         +`<td style="text-align:left;font-family:Inter,sans-serif">${l.status.rot}</td>`
-        +`<td>${nf(l.pcs)}</td><td>${hDur(l.comDados)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oee.programado)}">${fmtPct(l.oee.programado)}</td>`
+        +`<td>${nf(l.pcs)}${l.incAbsorvido>0?' <small>(+'+nf(l.incAbsorvido)+')</small>':''}</td><td>${hDur(l.comDados)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${fmtPct(l.oee.parcial)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td></td><td>${nf(t0.pcs)}</td><td>${hDur(t0.comDados)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${fmtPct(t0.oee.parcial)}</td></tr></tfoot></table>`;
@@ -2246,18 +2340,20 @@ function relatorioA4(){
 function blocoRastro(A){
   const t=A.tot,c=A.maq;
   const L=[
+    ['Marcações','última − primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'min')+' → '+dtBR(t.ultimoReg,'min'),hDur(t.marcacoes),t.oee.marcacoes],
     ['Programado','período − abono',hDur(t.dur)+' − '+nf1(t.abono)+' min',hDur(t.programado),t.oee.programado],
     ['Observado','com dados − abono',hDur(t.comDados)+' − '+nf1(t.abonoCoberto)+' min',hDur(t.observado),t.oee.observado],
     ['Operacional','observado − paradas',hDur(t.observado)+' − '+nf1(t.parado)+' min',hDur(t.operacional),t.oee.operacional],
-    ['Parcial','última marcação − início',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min'),hDur(t.parcial),t.oee.parcial]
+    ['Parcial','última marcação − início do período',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min'),hDur(t.parcial),t.oee.parcial]
   ];
   return '<h4>Bases de cálculo e fórmulas</h4><table><thead><tr><th>Base</th><th>Definição</th>'
     +'<th>Conta</th><th>Tempo</th><th>Planejado</th><th>OEE</th></tr></thead><tbody>'
     +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
-      +`<td>${fmtVal(t.planCap[['programado','observado','operacional','parcial'][i]])}</td>`
+      +`<td>${fmtVal(t.planCap[['marcacoes','programado','observado','operacional','parcial'][i]])}</td>`
       +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
     +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
+    +`Leitura do contador ${fmtVal(t.leituraIni)} → ${fmtVal(t.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(t.contagemInicial)}). `
     +`Peças = ${nf(t.inc)} incrementos × ${nf(A.pc)} = ${nf(t.pcs)}. `
     +`Planejado = ${nf(c.cap)} peças/h × base ÷ 60. Meta = ${nf(c.meta)} peças/h × base ÷ 60.</div>`;
 }
@@ -2310,7 +2406,9 @@ function textoEmail(){
     b+=`- Primeira marcação: ${x.primeiroReg==null?NAO_CALC:dtBR(x.primeiroReg)}\n`;
     b+=`- Última marcação: ${x.ultimoReg==null?NAO_CALC:dtBR(x.ultimoReg)}\n`;
     b+=`- Tempo: período ${hDur(x.dur)}, com dados ${hDur(x.comDados)}, sem dados ${hDur(x.semDados)}, rodando ${hDur(x.operacional)}\n`;
-    b+=`- OEE programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    b+=`- Leitura do contador: ${fmtVal(x.leituraIni)} → ${fmtVal(x.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(x.contagemInicial)})\n`;
+    if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
+    b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
     b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
     b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
     b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;
@@ -2321,7 +2419,9 @@ function textoEmail(){
     if(A.turnos.length){
       b+=`- Por turno:\n`;
       for(const l of A.turnos)
-        b+=`   ${l.bk.dia} ${l.bk.rot} [${l.status.rot}]: ${nf(l.pcs)} peças em ${hDur(l.comDados)} com dados — OEE ${fmtPct(l.oee.programado)} (parcial ${fmtPct(l.oee.parcial)})\n`;
+        b+=`   ${l.bk.dia} ${l.bk.rot} [${l.status.rot}]: ${nf(l.pcs)} peças`
+          +(l.incAbsorvido>0?` (inclui ${nf(l.incAbsorvido)} adiantadas)`:'')
+          +` em ${hDur(l.comDados)} com dados — OEE ${fmtPct(l.oeeBase)} (parcial ${fmtPct(l.oee.parcial)})\n`;
     }
     if(A.paradas.length)
       b+=`- Maiores paradas: `+A.paradas.slice(0,3).map(p=>`${dtCurto(p.a)}-${hhmm(new Date(p.b))} (${nf1(p.min)} min)`).join('; ')+`\n`;
@@ -2390,15 +2490,20 @@ const cabecalhoJanela=()=>[
   ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
 ];
 
-const COLS_METRICA=['Registros','Incrementos','Pecas','Nao_atribuido','Meta_pecas','Atingimento_%',
-  'Planejado_pecas','OEE_base_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
-  'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min','Programado_min','Observado_min',
-  'Operacional_min','Parcial_min','Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
-const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.naoAtrib),
+const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc','Nao_atribuido',
+  'Leitura_inicial','Leitura_final','Contagem_inicia_em',
+  'Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
+  'OEE_marcacoes_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
+  'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
+  'Marcacoes_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
+  'Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
+const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),nf0(l.naoAtrib),
+  nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
-  csvPct(l.oee.programado),csvPct(l.oee.observado),csvPct(l.oee.operacional),csvPct(l.oee.parcial),
+  csvPct(l.oee.marcacoes),csvPct(l.oee.programado),csvPct(l.oee.observado),
+  csvPct(l.oee.operacional),csvPct(l.oee.parcial),
   csvNum(l.dur,1),csvNum(l.comDados,1),csvNum(l.semDados,1),csvNum(l.parado,1),csvNum(l.abono,1),
-  csvNum(l.programado,1),csvNum(l.observado,1),csvNum(l.operacional,1),csvNum(l.parcial,1),
+  csvNum(l.marcacoes,1),csvNum(l.programado,1),csvNum(l.observado,1),csvNum(l.operacional,1),csvNum(l.parcial,1),
   csvPct(l.cobertura),csvPct(l.disp),csvNum(l.ritmo,0),csvNum(l.interv,1)];
 const nf0=v=>v==null||!Number.isFinite(v)?'':String(Math.round(v));
 
@@ -2412,10 +2517,11 @@ function exportarCSV(tipo){
     for(const A of LAST.AS)L.push([A.maq.nome,dtBR(LAST.ini),dtBR(LAST.fim),...linhaMetrica(A.tot)]);
   }else if(tipo==='turno'){
     nome='turnos';
-    L.push(['Maquina','Dia','Turno','Status','Anexado','Recortado','Inicio','Fim',...COLS_METRICA]);
+    L.push(['Maquina','Dia','Turno','Status','Anexado','Recortado',
+      'Tempo_inicio','Tempo_fim','Producao_inicio','Producao_fim',...COLS_METRICA]);
     for(const A of LAST.AS)for(const l of A.turnos)
       L.push([A.maq.nome,l.bk.dia,l.bk.rot,l.status.rot,l.bk.anexado?'sim':'nao',
-        l.bk.recortado?'sim':'nao',dtBR(l.a),dtBR(l.b),...linhaMetrica(l)]);
+        l.bk.recortado?'sim':'nao',dtBR(l.a),dtBR(l.b),dtBR(l.pa),dtBR(l.pb),...linhaMetrica(l)]);
   }else if(tipo==='hora'){
     nome='horas';
     L.push(['Maquina','Inicio','Fim','Hora_cheia',...COLS_METRICA]);
@@ -2464,7 +2570,7 @@ function formMaquina(m){
     <div class="fld"><label>Nome do incremento</label><input id="f_unid" value="${esc(m.unid)}" placeholder="caixa, rack, palete"></div>
     <div class="fld"><label>Capacidade (peças/h)</label><input type="number" id="f_cap" value="${m.cap}" min="1" step="100"></div>
     <div class="fld"><label>Meta (peças/h)</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
-    <div class="fld"><label>Contagem do lote inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
+    <div class="fld"><label>Contador indica a próxima — contagem inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
     <div class="fld"><label>Cor no gráfico</label><select id="f_cor">${PAL.map(c=>`<option value="${c}" ${c===m.cor?'selected':''}>${c}</option>`).join('')}</select></div>
   </div>
   <div class="fld" style="margin-top:14px"><label>Como ela trabalha</label><textarea id="f_obs" placeholder="produto, formato, particularidades de setup, gargalo...">${esc(m.obs)}</textarea></div>
@@ -2475,13 +2581,18 @@ function formMaquina(m){
     if(u)$('f_por').value=1;
     const por=u?1:(+$('f_por').value||1),cap=+$('f_cap').value||0,meta=+$('f_meta').value||0;
     const un=esc($('f_unid').value||'lote');
-    $('f_prev').innerHTML=u
+    const off=+$('f_off').value||0;
+    const alvo=u?'peça':un;
+    $('f_prev').innerHTML=(u
       ?`Cada incremento é <b>1 peça</b>. Capacidade de <b>${nf(cap)}</b> e meta de <b>${nf(meta)}</b> peças por hora.`
       :`Cada incremento é <b>1 ${un}</b> = <b>${nf(por)}</b> peças. Capacidade de <b>${nf(cap)}</b> peças/h equivale a `
        +`<b>${nf1(cap/por)}</b> ${un}s por hora, ou <b>${nf1(3600/(cap/por))}</b> s por ${un}. `
-       +`Meta de <b>${nf(meta)}</b> peças/h = <b>${nf1(meta/por)}</b> ${un}s por hora.`;
+       +`Meta de <b>${nf(meta)}</b> peças/h = <b>${nf1(meta/por)}</b> ${un}s por hora.`)
+      +`<br><br>O contador mostra a <b>próxima</b> ${alvo}: com a contagem iniciando em <b>${nf(off)}</b>, `
+      +`a leitura <b>${nf(off)}</b> significa <b>nenhuma</b> ${alvo} concluída e a leitura <b>${nf(off+20)}</b> significa `
+      +`<b>20</b> ${alvo}s concluídas. É esse valor que a ferramenta usa ao reiniciar a contagem.`;
   };
-  ['f_por','f_unid','f_cap','f_meta'].forEach(i=>$(i).addEventListener('input',sync));
+  ['f_por','f_unid','f_cap','f_meta','f_off'].forEach(i=>$(i).addEventListener('input',sync));
   $('f_modo').addEventListener('change',sync);sync();
   $('dlg_f').innerHTML='';
   const c=el('button','act');c.type='button';c.textContent='Cancelar';
@@ -2567,12 +2678,14 @@ $('t_padrao').addEventListener('click',async()=>{
   await recarregar();montarTurnos();toast('Três turnos criados — ajuste os horários se precisar')});
 
 /* Regra do turno desconsiderado: a ocorrência escolhida deixa de existir como
-   linha e sua janela é absorvida pelo turno cronologicamente seguinte, sem que
-   nenhum registro seja contado duas vezes. A escolha fica salva nas preferências. */
+   linha e sua PRODUÇÃO é absorvida pelo turno seguinte, que continua sendo
+   medido pelo próprio horário cadastrado. É o caso do turno de limpeza que
+   adianta caixas: o turno seguinte já começa com elas, sem herdar as horas.
+   A escolha fica salva nas preferências. */
 function montarBorda(){
   const s=$('a_borda'),atual=s.value||PREFS.borda||'todos';
   s.innerHTML='<option value="todos">Manter cada turno cadastrado</option>'
-    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
+    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — produção vai para o turno seguinte</option>`).join('');
   s.value=[...s.options].some(o=>o.value===atual)?atual:'todos';
   PREFS.borda=s.value;
 }

@@ -17,6 +17,7 @@ const CARDS=[
   ['ultimo','Última marcação','Período',1],
   ['periodo','Período selecionado','Período',1],
   ['dados','Tempo com dados','Período',1],
+  ['contagem','Contagem do contador','Produção',1],
   ['semdados','Tempo sem dados','Período',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
@@ -24,6 +25,7 @@ const CARDS=[
   ['oeeobs','OEE observado','Desempenho',0],
   ['oeeoper','OEE operacional','Desempenho',0],
   ['oeeparcial','OEE parcial','Desempenho',1],
+  ['oeemarc','OEE entre marcações','Desempenho',0],
   ['parado','Tempo parado','Paradas',1],
   ['disp','Disponibilidade','Paradas',0],
   ['ritmo','Ritmo médio','Cadência',1],
@@ -45,6 +47,7 @@ const OPCOES=[
 /* Bases de cálculo. O rótulo aparece nos cards e no relatório, para que o
    número nunca fique sem dizer contra o que foi medido. */
 const BASES=[
+  ['marcacoes','Da primeira à última marcação','tempo entre o primeiro e o último registro do contador, menos abono — a produção começa quando a primeira caixa é contada'],
   ['programado','Período selecionado','duração do período menos abono'],
   ['observado','Janela com dados','tempo coberto pelos registros menos abono'],
   ['operacional','Tempo rodando','tempo com dados menos abono e menos paradas'],
@@ -57,7 +60,7 @@ function prefsPadrao(){
   const cards={},secoes={};
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
-  return{v:PREFS_VER,cards,secoes,base:'programado',gran:'hora',tipo:'auto',
+  return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
     limParada:3,limSemDados:30,borda:'todos',auto:false,autoSeg:120,
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }

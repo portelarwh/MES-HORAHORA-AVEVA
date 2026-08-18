@@ -16,7 +16,17 @@ function cardsDe(A){
     tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
   const M={
     producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
-      eqInc+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+      eqInc
+      +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
+      +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    /* O contador do historian indica a PRÓXIMA unidade: a leitura 21 significa
+       20 caixas concluídas. Este cartão existe para o operador conferir isso
+       contra o painel da máquina. */
+    contagem:()=>['contagem','Contagem do contador',
+      t.leituraFim==null?NAO_CALC:nf(t.leituraFim),
+      t.leituraIni==null?'sem leitura no período':'primeira leitura '+nf(t.leituraIni),'c',
+      'a leitura indica a próxima '+esc(u)+' · contagem inicia em '+nf(t.contagemInicial)
+      +' · '+plural(t.inc,u)+' concluída'+(t.inc===1?'':'s')+' no período'],
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -42,6 +52,9 @@ function cardsDe(A){
     oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
     oeeparcial:()=>oeeCard('oeeparcial','OEE parcial',t.oee.parcial,t.parcial,
       t.ultimoReg==null?'sem registro no período':'do início do período até '+dtBR(t.ultimoReg,'min')),
+    oeemarc:()=>oeeCard('oeemarc','OEE entre marcações',t.oee.marcacoes,t.marcacoes,
+      t.primeiroReg==null?'sem registro no período'
+        :dtBR(t.primeiroReg,'min')+' → '+dtBR(t.ultimoReg,'min')),
     parado:()=>['parado','Tempo parado',fmtMin(t.parado),
       t.nPar+' parada'+(t.nPar===1?'':'s')+' acima de '+nf1(A.limParadaMin)+' min',
       cl(alvo(t.disp,1)),'disponibilidade '+fmtPct(t.disp)],
@@ -92,37 +105,45 @@ function seta(atual,ant){
 const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
 
 /* --- fechamento por turno ------------------------------------------------ */
+/* Duas janelas por linha: a produção pode vir de antes do turno (caixas
+   adiantadas pelo turno anexado), mas o tempo é sempre o horário cadastrado. */
 function tabelaTurnos(A){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
     +'<th rowspan="2">Turno</th><th rowspan="2">Status</th>'
-    +'<th class="grp" colspan="2">Produção</th>'
+    +'<th class="grp" colspan="3">Produção</th>'
     +'<th class="grp" colspan="4">Tempo (h)</th>'
-    +'<th class="grp" colspan="3">OEE</th>'
+    +'<th class="grp" colspan="4">OEE</th>'
     +'<th rowspan="2">Meta</th><th rowspan="2">Qualidade</th></tr><tr>'
-    +`<th class="sep">${u}</th><th>Peças</th>`
+    +`<th class="sep">${u}</th><th>Peças</th><th>Adiantadas</th>`
     +'<th class="sep">No período</th><th>Com dados</th><th>Sem dados</th><th>Parado</th>'
-    +'<th class="sep">Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
-  const T={inc:0,pcs:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,mProg:0};
-  if(!A.turnos.length)h+='<tr><td colspan="12" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
+    +'<th class="sep">Marcações</th><th>Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
+  const T={inc:0,pcs:0,ant:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,pMarc:0,mBase:0};
+  const st=k=>k==='completo'?'g':k==='semdados'?'r':k==='antecipada'?'n':'w';
+  if(!A.turnos.length)h+='<tr><td colspan="14" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
   for(const l of A.turnos){
     h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}`
       +`${l.bk.anexado?' <span class="tag">+ turno anexado</span>':''}`
-      +`${l.bk.recortado?' <span class="tag">recortado</span>':''}</td>`
-      +`<td style="text-align:left"><span class="pill p-${l.status.k==='completo'?'g':l.status.k==='semdados'?'r':'w'}">${l.status.rot}</span></td>`
+      +`${l.bk.recortado&&!l.bk.soProducao?' <span class="tag">recortado</span>':''}</td>`
+      +`<td style="text-align:left"><span class="pill p-${st(l.status.k)}">${l.status.rot}</span></td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
+      +`<td>${l.incAbsorvido>0?nf(l.incAbsorvido):'—'}</td>`
       +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
-      +`<td class="sep">${pill(l.oee.programado,.85)}</td><td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td class="sep">${pill(l.oee.marcacoes,.85)}</td><td>${pill(l.oee.programado,.85)}</td>`
+      +`<td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
       +`<td>${pill(l.atingBase)}</td>`
       +`<td>${fmtPct(l.cobertura)}</td></tr>`;
-    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.dur;T.com+=l.comDados;T.sem+=l.semDados;T.par+=l.parado;
-    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;T.mProg+=l.planMetaBase||0;
+    T.inc+=l.inc;T.pcs+=l.pcs;T.ant+=l.incAbsorvido;T.dur+=l.dur;T.com+=l.comDados;
+    T.sem+=l.semDados;T.par+=l.parado;
+    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;
+    T.pMarc+=l.planCap.marcacoes||0;T.mBase+=l.planMetaBase||0;
   }
   return h+`</tbody><tfoot><tr><td>Total geral</td><td></td>`
-    +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td>`
+    +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td><td>${T.ant>0?nf(T.ant):'—'}</td>`
     +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.com)}</td><td>${hDur(T.sem)}</td><td>${fmtMin(T.par)}</td>`
-    +`<td class="sep">${pct(T.pcs,T.pProg)}</td><td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
-    +`<td>${pct(T.pcs,T.mProg)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
+    +`<td class="sep">${pct(T.pcs,T.pMarc)}</td><td>${pct(T.pcs,T.pProg)}</td>`
+    +`<td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
+    +`<td>${pct(T.pcs,T.mBase)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
 }
 
 /* --- qualidade e validação ---------------------------------------------- */
@@ -160,6 +181,9 @@ function rastreabilidade(A){
   const L=[
     ['Peças produzidas','incrementos × peças por incremento',
       nf(t.inc)+' × '+nf(A.pc),nf(t.pcs)+' peças'],
+    ['Leitura do contador','a leitura indica a próxima unidade',
+      fmtVal(t.leituraIni)+' → '+fmtVal(t.leituraFim)+' · inicia em '+nf(t.contagemInicial),
+      nf(t.inc)+' concluídas'],
     ['Período selecionado','fim − início',
       dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
     ['Tempo com dados','período − tempo sem dados',
@@ -172,6 +196,8 @@ function rastreabilidade(A){
       hDur(t.observado)+' − '+fmtMin(t.parado),hDur(t.operacional)],
     ['Tempo parcial','última marcação − início do período − abono',
       t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.a,'min'),hDur(t.parcial)],
+    ['Tempo entre marcações','última marcação − primeira marcação − abono',
+      t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
     ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
       nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
     ['Atingimento','peças ÷ meta proporcional',
@@ -188,6 +214,8 @@ function rastreabilidade(A){
       nf(t.pcs)+' ÷ '+fmtVal(t.planCap.operacional),fmtPct(t.oee.operacional)],
     ['OEE parcial','peças ÷ (capacidade × parcial ÷ 60)',
       nf(t.pcs)+' ÷ '+fmtVal(t.planCap.parcial),fmtPct(t.oee.parcial)],
+    ['OEE entre marcações','peças ÷ (capacidade × marcações ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.marcacoes),fmtPct(t.oee.marcacoes)],
     ['Disponibilidade','operacional ÷ observado',
       hDur(t.operacional)+' ÷ '+hDur(t.observado),fmtPct(t.disp)],
     ['Cobertura de dados','tempo com dados ÷ período',

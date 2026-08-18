@@ -22,11 +22,36 @@ delta  = valor[i] − valor[i−1]
 peças  = delta × peças por incremento
 ```
 
-Quando `delta` é negativo houve reinício de lote. Nesse caso
-`delta = valor[i] − offset`, sendo o offset o campo **“contagem do lote inicia
-em”** da máquina — existe porque contadores que exibem a *próxima* unidade abrem
-o lote em 1 sem nada produzido. O reinício é contado e aparece na qualidade dos
-dados.
+### O contador indica a PRÓXIMA unidade
+
+Esta é a premissa mais importante da leitura. O contador da linha não mostra
+quantas caixas ficaram prontas — ele mostra **qual é a próxima caixa**. Com a
+contagem iniciando em 1:
+
+| Leitura | Caixas concluídas |
+| --- | --- |
+| 1 | 0 — a contagem começou, nada foi produzido |
+| 2 | 1 |
+| 21 | 20 |
+
+Ou seja, `caixas concluídas = leitura − início da contagem`. O “início da
+contagem” é o campo **“Contador indica a próxima — contagem inicia em”** do
+cadastro da máquina, normalmente 1.
+
+Contar por diferença entre leituras consecutivas dá o mesmo resultado, porque o
+início da contagem se cancela na subtração — e é assim que a ferramenta trabalha
+no meio da série. O início da contagem aparece explicitamente em dois momentos:
+
+- **no reinício de contagem**, quando `delta` é negativo: nesse caso
+  `delta = valor[i] − início da contagem`. Voltar para a leitura 1 conta **zero**
+  caixas, não uma;
+- **no cartão “Contagem do contador”**, que mostra a primeira e a última leitura
+  do período ao lado das caixas contadas, para o operador conferir contra o
+  painel da máquina.
+
+A primeira marcação do período **não é o início da produção** — é o instante em
+que a contagem foi lida. É por isso que existe a base *Da primeira à última
+marcação*, descrita na seção 3.
 
 A série **não é quebrada na meia-noite**. Um incremento entre 23h59 e 00h01 é
 contado normalmente; o dia é apenas a chave de armazenamento, não um critério de
@@ -92,6 +117,7 @@ Todos medidos **dentro da janela exata** escolhida em data **e horário**.
 E as quatro **bases de cálculo** derivadas, escolhidas no seletor da tela:
 
 ```
+marcacoes   = (última marcação − primeira marcação) − abono entre elas
 programado  = período selecionado − abono
 observado   = tempo com dados − abono que cai dentro da cobertura
 operacional = observado − tempo parado
@@ -99,11 +125,17 @@ parcial     = (última marcação do período − início do período) − abono
 ```
 
 A base é sempre mostrada junto do indicador. Um OEE sem a base declarada não
-significa nada, porque o mesmo turno pode render 91% ou 102% conforme o
+significa nada, porque o mesmo turno pode render 91% ou 108% conforme o
 denominador.
+
+A base padrão é **Da primeira à última marcação**. O motivo é operacional: a
+linha não começa a produzir quando o relógio do filtro vira, e sim quando a
+primeira caixa é contada. Pedir a análise do dia inteiro e ser cobrado por 24 h
+de meta, quando a linha contou das 05:00 às 14:00, mede o filtro e não a linha.
 
 | Base | Responde a | Quando usar |
 | --- | --- | --- |
+| Da primeira à última marcação | “quanto a linha entregou enquanto esteve contando?” | **padrão** — é como a linha se comporta |
 | Período selecionado | “quanto a linha entregou do que o relógio permitia?” | fechamento oficial |
 | Janela com dados | “quanto ela entregou enquanto era observada?” | coleta incompleta |
 | Tempo rodando | “quanto ela entregou enquanto de fato rodava?” | isolar cadência de parada |
@@ -154,6 +186,7 @@ Quatro leituras, uma por base:
 
 | Indicador | Denominador |
 | --- | --- |
+| **OEE entre marcações** | capacidade × (última − primeira marcação) |
 | **OEE programado** | capacidade × período selecionado (− abono) |
 | **OEE observado** | capacidade × tempo com dados (− abono) |
 | **OEE operacional** | capacidade × tempo rodando |
@@ -248,14 +281,49 @@ Status de cada linha:
 
 ### Turno desconsiderado
 
-O seletor **“Turno desconsiderado”** faz o turno escolhido deixar de existir como
-linha: sua janela é absorvida pelo turno cronologicamente **seguinte**, que passa
-a começar mais cedo e é marcado como *turno anexado*.
+O seletor **“Turno desconsiderado”** existe para o turno que não é produtivo — na
+linha de referência, o 3º turno é de limpeza. Ele desaparece como linha do
+fechamento, e a regra tem duas metades que precisam ser lidas juntas:
 
-Caixas fechadas às 05h30 com o 1º turno começando às 06h00: mantendo o cadastro
-elas vão para o 3º turno; desconsiderando o 3º turno elas entram no 1º, sem virar
-hora extra. O período continua **totalmente coberto** — nenhum minuto e nenhum
-registro desaparece, o que é verificado em `tests/turnos.test.mjs`.
+| O que acontece | Por quê |
+| --- | --- |
+| A **produção** do turno desconsiderado vai para o turno seguinte | os funcionários da limpeza às vezes adiantam caixas; elas são trabalho entregue e pertencem a quem recebe o turno |
+| As **horas** do turno desconsiderado **não** vão | o turno de limpeza não é produtivo; cobrar meta e OEE por essas horas puniria o turno seguinte por um tempo em que ninguém deveria estar produzindo |
+
+Na prática, cada linha do fechamento passa a ter **duas janelas**:
+
+```
+janela de tempo      = horário cadastrado do turno   -> denominador (meta, OEE)
+janela de produção   = estendida sobre o turno anexo -> numerador (caixas, peças)
+```
+
+**Exemplo.** Turnos 06:00–14:20, 14:20–22:40 e 22:40–06:00, com o 3º
+desconsiderado. Entre 05:00 e 05:40 o pessoal da limpeza fecha 20 caixas; das
+06:00 às 14:00 o 1º turno fecha mais 160.
+
+```
+1º turno, janela de produção : 00:00 -> 14:20   -> 180 caixas (20 adiantadas)
+1º turno, janela de tempo    : 06:00 -> 14:20   -> 8h20
+OEE programado = 180.000 ÷ (20.000 peças/h × 8h20) = 108,0 %
+```
+
+O operador começa o turno com 20 caixas na conta e continua sendo medido pelas
+8h20 do próprio turno. Se as horas do turno de limpeza entrassem no denominador,
+o mesmo trabalho apareceria como 54% — foi assim que a ferramenta se comportou
+até a versão 4.0.0, e estava errado para este caso.
+
+A coluna **Adiantadas** mostra quantos incrementos vieram de antes do início do
+turno, e a linha recebe a marca *+ turno anexado*.
+
+Consequência a conhecer: com um turno desconsiderado, a soma das horas das linhas
+do fechamento é **menor** que o período selecionado, exatamente pelas horas do
+turno retirado. A soma das caixas continua igual à do período — nada é duplicado
+nem perdido, o que é verificado em `tests/turno-anexado.test.mjs`.
+
+Quando a produção adiantada pertence a um turno que começa fora da janela
+analisada, ela aparece numa linha marcada como **Produção antecipada**, com
+tempo zero e OEE não calculável: as caixas existem, mas o turno que vai respondê‑las
+ainda não começou dentro do período.
 
 ---
 
