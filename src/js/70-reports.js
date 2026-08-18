@@ -35,8 +35,8 @@ function relatorioA4(){
       +'<th>Com dados</th><th>OEE</th><th>Parcial</th></tr></thead><tbody>'
       +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td>`
         +`<td style="text-align:left;font-family:Inter,sans-serif">${l.status.rot}</td>`
-        +`<td>${nf(l.pcs)}</td><td>${hDur(l.comDados)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oee.programado)}">${fmtPct(l.oee.programado)}</td>`
+        +`<td>${nf(l.pcs)}${l.incAbsorvido>0?' <small>(+'+nf(l.incAbsorvido)+')</small>':''}</td><td>${hDur(l.comDados)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${fmtPct(l.oee.parcial)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td></td><td>${nf(t0.pcs)}</td><td>${hDur(t0.comDados)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${fmtPct(t0.oee.parcial)}</td></tr></tfoot></table>`;
@@ -105,18 +105,20 @@ function relatorioA4(){
 function blocoRastro(A){
   const t=A.tot,c=A.maq;
   const L=[
+    ['Marcações','última − primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'min')+' → '+dtBR(t.ultimoReg,'min'),hDur(t.marcacoes),t.oee.marcacoes],
     ['Programado','período − abono',hDur(t.dur)+' − '+nf1(t.abono)+' min',hDur(t.programado),t.oee.programado],
     ['Observado','com dados − abono',hDur(t.comDados)+' − '+nf1(t.abonoCoberto)+' min',hDur(t.observado),t.oee.observado],
     ['Operacional','observado − paradas',hDur(t.observado)+' − '+nf1(t.parado)+' min',hDur(t.operacional),t.oee.operacional],
-    ['Parcial','última marcação − início',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min'),hDur(t.parcial),t.oee.parcial]
+    ['Parcial','última marcação − início do período',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min'),hDur(t.parcial),t.oee.parcial]
   ];
   return '<h4>Bases de cálculo e fórmulas</h4><table><thead><tr><th>Base</th><th>Definição</th>'
     +'<th>Conta</th><th>Tempo</th><th>Planejado</th><th>OEE</th></tr></thead><tbody>'
     +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
-      +`<td>${fmtVal(t.planCap[['programado','observado','operacional','parcial'][i]])}</td>`
+      +`<td>${fmtVal(t.planCap[['marcacoes','programado','observado','operacional','parcial'][i]])}</td>`
       +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
     +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
+    +`Leitura do contador ${fmtVal(t.leituraIni)} → ${fmtVal(t.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(t.contagemInicial)}). `
     +`Peças = ${nf(t.inc)} incrementos × ${nf(A.pc)} = ${nf(t.pcs)}. `
     +`Planejado = ${nf(c.cap)} peças/h × base ÷ 60. Meta = ${nf(c.meta)} peças/h × base ÷ 60.</div>`;
 }
@@ -169,7 +171,9 @@ function textoEmail(){
     b+=`- Primeira marcação: ${x.primeiroReg==null?NAO_CALC:dtBR(x.primeiroReg)}\n`;
     b+=`- Última marcação: ${x.ultimoReg==null?NAO_CALC:dtBR(x.ultimoReg)}\n`;
     b+=`- Tempo: período ${hDur(x.dur)}, com dados ${hDur(x.comDados)}, sem dados ${hDur(x.semDados)}, rodando ${hDur(x.operacional)}\n`;
-    b+=`- OEE programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    b+=`- Leitura do contador: ${fmtVal(x.leituraIni)} → ${fmtVal(x.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(x.contagemInicial)})\n`;
+    if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
+    b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
     b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
     b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
     b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;
@@ -180,7 +184,9 @@ function textoEmail(){
     if(A.turnos.length){
       b+=`- Por turno:\n`;
       for(const l of A.turnos)
-        b+=`   ${l.bk.dia} ${l.bk.rot} [${l.status.rot}]: ${nf(l.pcs)} peças em ${hDur(l.comDados)} com dados — OEE ${fmtPct(l.oee.programado)} (parcial ${fmtPct(l.oee.parcial)})\n`;
+        b+=`   ${l.bk.dia} ${l.bk.rot} [${l.status.rot}]: ${nf(l.pcs)} peças`
+          +(l.incAbsorvido>0?` (inclui ${nf(l.incAbsorvido)} adiantadas)`:'')
+          +` em ${hDur(l.comDados)} com dados — OEE ${fmtPct(l.oeeBase)} (parcial ${fmtPct(l.oee.parcial)})\n`;
     }
     if(A.paradas.length)
       b+=`- Maiores paradas: `+A.paradas.slice(0,3).map(p=>`${dtCurto(p.a)}-${hhmm(new Date(p.b))} (${nf1(p.min)} min)`).join('; ')+`\n`;

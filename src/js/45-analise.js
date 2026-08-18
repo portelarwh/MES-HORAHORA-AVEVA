@@ -57,13 +57,19 @@ function guardarFiltros(){
 let ASSINATURA='';
 const assinaturaDe=AS=>AS.map(A=>A.maq.id+':'+A.pts.length+':'+(A.pts.length?A.pts[A.pts.length-1][0]:0)).join('|');
 
+/* Quando o turno em si está fora da janela mas ele absorveu caixas adiantadas
+   que estão dentro, a linha existe só para mostrar essa produção — sem tempo,
+   não há meta nem OEE a calcular. */
 function statusTurno(bk,t,agora){
+  if(bk.soProducao)return{k:'antecipada',rot:'Produção antecipada'};
   if(bk.bCheio>agora&&bk.aCheio<=agora)return{k:'andamento',rot:'Em andamento'};
   if(bk.aCheio>agora)return{k:'futuro',rot:'Ainda não começou'};
   if(!t.regs)return{k:'semdados',rot:'Sem dados'};
   if(bk.recortado)return{k:'parcial',rot:'Recortado pelo filtro'};
   return{k:'completo',rot:'Fechado'};
 }
+/* Recorte de tempo e recorte de produção podem divergir (turno anexado). */
+const medir=(A,bk)=>metricas(A,bk.a,bk.b,bk.aProd==null?null:{a:bk.aProd,b:bk.bProd});
 
 async function rodarAnalise(opts){
   opts=opts||{};
@@ -105,10 +111,12 @@ async function rodarAnalise(opts){
 
   for(const A of AS){
     A.tot=metricas(A,J.ini,J.fim);
-    A.linhas=B.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.horas=BH.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.turnos=BT.map(bk=>{const m=metricas(A,bk.a,bk.b);
-      return{bk,...m,status:statusTurno(bk,m,agora)}});
+    A.linhas=B.map(bk=>({bk,...medir(A,bk)}));
+    A.horas=BH.map(bk=>({bk,...medir(A,bk)}));
+    A.turnos=BT.map(bk=>{const m=medir(A,bk);
+      return{bk,...m,status:statusTurno(bk,m,agora)}})
+      /* linha só de produção antecipada sem nenhuma caixa é ruído */
+      .filter(l=>!(l.bk.soProducao&&!l.regs));
     A.qual=qualidade(A,A.tot);
     A.valid=validacoes(A,A.tot,ctx);
   }

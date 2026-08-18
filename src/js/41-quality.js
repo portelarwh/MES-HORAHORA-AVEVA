@@ -57,6 +57,17 @@ function validacoes(A,t,ctx){
     add('aten','DUPLICADO',nf(q.duplicados)+' carimbos repetidos',
       'Carimbos iguais foram mesclados, prevalecendo o último valor lido. Reimportação do mesmo período não duplica produção.');
 
+  /* O contador indica a próxima unidade: leitura igual ao início da contagem
+     significa nada produzido ainda, e não uma unidade pronta. */
+  if(t.leituraIni!=null&&c.offset>0&&t.leituraIni===c.offset)
+    add('info','CONTAGEM','O período começa no início da contagem',
+      'A primeira leitura é '+nf(t.leituraIni)+', igual ao início cadastrado. Como o contador indica a próxima unidade, '
+      +'nada havia sido produzido nesse instante.');
+  if(t.incAbsorvido>0)
+    add('info','ANTECIPADA',nf(t.incAbsorvido)+' incrementos adiantados absorvidos',
+      'Vieram de antes do início do turno, pelo turno desconsiderado. Entram na produção deste turno, '
+      +'mas as horas do turno anexado não entram no denominador da meta nem do OEE.');
+
   if(q.resets>0)
     add('info','RESET',nf(q.resets)+' reinícios de contagem',
       'O contador voltou para trás. O incremento passou a ser o valor lido menos o offset de '+nf(c.offset||0)+' da máquina.');

@@ -17,7 +17,7 @@ function formMaquina(m){
     <div class="fld"><label>Nome do incremento</label><input id="f_unid" value="${esc(m.unid)}" placeholder="caixa, rack, palete"></div>
     <div class="fld"><label>Capacidade (peças/h)</label><input type="number" id="f_cap" value="${m.cap}" min="1" step="100"></div>
     <div class="fld"><label>Meta (peças/h)</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
-    <div class="fld"><label>Contagem do lote inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
+    <div class="fld"><label>Contador indica a próxima — contagem inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
     <div class="fld"><label>Cor no gráfico</label><select id="f_cor">${PAL.map(c=>`<option value="${c}" ${c===m.cor?'selected':''}>${c}</option>`).join('')}</select></div>
   </div>
   <div class="fld" style="margin-top:14px"><label>Como ela trabalha</label><textarea id="f_obs" placeholder="produto, formato, particularidades de setup, gargalo...">${esc(m.obs)}</textarea></div>
@@ -28,13 +28,18 @@ function formMaquina(m){
     if(u)$('f_por').value=1;
     const por=u?1:(+$('f_por').value||1),cap=+$('f_cap').value||0,meta=+$('f_meta').value||0;
     const un=esc($('f_unid').value||'lote');
-    $('f_prev').innerHTML=u
+    const off=+$('f_off').value||0;
+    const alvo=u?'peça':un;
+    $('f_prev').innerHTML=(u
       ?`Cada incremento é <b>1 peça</b>. Capacidade de <b>${nf(cap)}</b> e meta de <b>${nf(meta)}</b> peças por hora.`
       :`Cada incremento é <b>1 ${un}</b> = <b>${nf(por)}</b> peças. Capacidade de <b>${nf(cap)}</b> peças/h equivale a `
        +`<b>${nf1(cap/por)}</b> ${un}s por hora, ou <b>${nf1(3600/(cap/por))}</b> s por ${un}. `
-       +`Meta de <b>${nf(meta)}</b> peças/h = <b>${nf1(meta/por)}</b> ${un}s por hora.`;
+       +`Meta de <b>${nf(meta)}</b> peças/h = <b>${nf1(meta/por)}</b> ${un}s por hora.`)
+      +`<br><br>O contador mostra a <b>próxima</b> ${alvo}: com a contagem iniciando em <b>${nf(off)}</b>, `
+      +`a leitura <b>${nf(off)}</b> significa <b>nenhuma</b> ${alvo} concluída e a leitura <b>${nf(off+20)}</b> significa `
+      +`<b>20</b> ${alvo}s concluídas. É esse valor que a ferramenta usa ao reiniciar a contagem.`;
   };
-  ['f_por','f_unid','f_cap','f_meta'].forEach(i=>$(i).addEventListener('input',sync));
+  ['f_por','f_unid','f_cap','f_meta','f_off'].forEach(i=>$(i).addEventListener('input',sync));
   $('f_modo').addEventListener('change',sync);sync();
   $('dlg_f').innerHTML='';
   const c=el('button','act');c.type='button';c.textContent='Cancelar';
