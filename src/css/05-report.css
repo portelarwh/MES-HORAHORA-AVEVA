@@ -1,0 +1,50 @@
+/* 05-report.css — Folha A4, responsividade e regras de impressão. */
+
+#relbox{display:none;margin-top:18px}
+#relbox.on{display:block}
+#rel{width:210mm;min-height:297mm;padding:11mm 12mm;background:#fff;color:#16202E;margin:0 auto;
+  box-shadow:0 4px 24px rgba(0,0,0,.18);font-size:9.6pt;line-height:1.4;transform-origin:top center}
+#rel .rh{display:flex;align-items:flex-start;gap:10px;border-bottom:1.6pt solid #16202E;padding-bottom:6px;margin-bottom:9px}
+#rel .rh h3{font-size:15pt;font-weight:700;letter-spacing:-.3pt;line-height:1.15}
+#rel .rh .rsub{font-size:8.6pt;color:#576578;margin-top:2px}
+#rel .rh .rst{margin-left:auto;text-align:right;font-size:8pt;color:#576578;white-space:nowrap}
+#rel .rk{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:9px}
+#rel .rk div{border:.7pt solid #CDD5E0;border-radius:3px;padding:5px 7px}
+#rel .rk .lb{font-size:6.8pt;font-weight:600;color:#576578;text-transform:uppercase;letter-spacing:.3pt}
+#rel .rk .vl{font-size:14pt;font-weight:700;font-family:'IBM Plex Mono',monospace;line-height:1.15;margin-top:1px}
+#rel .rk .un{font-size:6.8pt;color:#8593A5;margin-top:1px}
+#rel h4{font-size:8.4pt;font-weight:700;text-transform:uppercase;letter-spacing:.5pt;color:#576578;
+  border-bottom:.7pt solid #CDD5E0;padding-bottom:2.5px;margin:9px 0 6px}
+#rel canvas{width:100%!important;height:auto!important;display:block}
+#rel .cols{display:grid;grid-template-columns:1.15fr 1fr;gap:11px;align-items:start}
+#rel table{width:100%;min-width:0;font-size:7.9pt;border-collapse:collapse}
+#rel th{background:#F2F4F7;font-size:6.8pt;font-weight:700;color:#576578;padding:3px 5px;text-align:right;
+  border-bottom:.7pt solid #CDD5E0;text-transform:uppercase;letter-spacing:.3pt}
+#rel th:first-child{text-align:left}
+#rel td{padding:2.6px 5px;text-align:right;border-bottom:.5pt solid #ECEFF3;font-family:'IBM Plex Mono',monospace;font-size:7.9pt}
+#rel td:first-child{text-align:left;font-family:'Inter',sans-serif;font-weight:500}
+#rel tfoot td{font-weight:700;border-top:.9pt solid #CDD5E0;background:#F8FAFC}
+#rel .rp{margin-bottom:6px;padding-left:9px;border-left:2pt solid #CDD5E0;font-size:8.4pt}
+#rel .rp.g{border-left-color:#1B8A5A}#rel .rp.w{border-left-color:#B27300}#rel .rp.r{border-left-color:#C33C4E}
+#rel .rp .rt{font-weight:700;font-size:8.6pt;margin-bottom:1px}
+#rel .rp .rd{color:#576578;line-height:1.4}
+#rel .rf{padding-top:7px;border-top:.7pt solid #CDD5E0;font-size:6.8pt;color:#8593A5;display:flex;justify-content:space-between;margin-top:8px}
+#rel .leg{display:flex;gap:12px;font-size:7.4pt;color:#576578;margin-bottom:4px}
+#rel .leg span span{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px}
+
+@media(max-width:900px){#rel{transform:scale(.62);margin-bottom:-110mm}}
+@media(max-width:620px){.wrap{padding:16px 13px 56px}.kpi .v{font-size:20px}h1{font-size:16px}
+  #rel{transform:scale(.42);margin-bottom:-172mm}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+@page{size:A4 portrait;margin:0}
+@media print{
+  body{background:#fff}
+  body.imprimir-rel>.wrap{display:none!important}
+  body.imprimir-rel #relbox{display:block!important;margin:0}
+  body.imprimir-rel #relbox .acts{display:none!important}
+  body.imprimir-rel #rel{box-shadow:none;transform:none;margin:0;width:210mm;min-height:0}
+  body:not(.imprimir-rel) .tgl,body:not(.imprimir-rel) nav.tabs,body:not(.imprimir-rel) #drop,
+  body:not(.imprimir-rel) .acts,body:not(.imprimir-rel) .opts,body:not(.imprimir-rel) .bar-tools,
+  body:not(.imprimir-rel) footer,body:not(.imprimir-rel) #relbox{display:none}
+  .card,.kpi,.tblwrap,.dg{box-shadow:none;break-inside:avoid}
+}

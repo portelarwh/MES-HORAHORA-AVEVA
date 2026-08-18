@@ -1,0 +1,8 @@
+/* 02-base.css — Reset, tipografia base e o container principal. */
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--tx);font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:15px;line-height:1.5;transition:background .2s,color .2s}
+td,.v,input[type=number],input[type=time],input[type=date],.mono{font-family:'IBM Plex Mono',ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.wrap{max-width:1300px;margin:0 auto;padding:22px 20px 72px}

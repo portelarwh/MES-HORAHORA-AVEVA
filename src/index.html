@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
+  <title>MES Hora a Hora — AVEVA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/01-tokens.css">
+  <link rel="stylesheet" href="css/02-base.css">
+  <link rel="stylesheet" href="css/03-layout.css">
+  <link rel="stylesheet" href="css/04-components.css">
+  <link rel="stylesheet" href="css/05-report.css">
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="logo"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/></svg></div>
+  <div class="hgroup">
+    <h1>Monitor de produção hora a hora</h1>
+    <div class="tagline">Importe o CSV do historian, feche o turno e compare máquinas na mesma linha do tempo</div>
+  </div>
+  <div class="tgl" role="group" aria-label="Tema">
+    <button type="button" id="t_light" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Claro</button>
+    <button type="button" id="t_dark" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>Escuro</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button type="button" role="tab" data-v="analise" aria-selected="true">Análise</button>
+  <button type="button" role="tab" data-v="importar" aria-selected="false">Importar</button>
+  <button type="button" role="tab" data-v="maquinas" aria-selected="false">Máquinas <span class="cnt" id="c_maq">0</span></button>
+  <button type="button" role="tab" data-v="turnos" aria-selected="false">Turnos <span class="cnt" id="c_tur">0</span></button>
+  <button type="button" role="tab" data-v="dia" aria-selected="false">Lançamentos <span class="cnt" id="c_aju">0</span></button>
+  <button type="button" role="tab" data-v="dados" aria-selected="false">Base de dados</button>
+</nav>
+
+<div class="view on" id="v_analise">
+  <section>
+    <div class="card">
+      <div class="bar-tools">
+        <div class="fld"><label for="a_de">De</label><input type="date" id="a_de"></div>
+        <div class="fld"><label for="a_ate">Até</label><input type="date" id="a_ate"></div>
+        <div class="fld"><label for="a_gran">Agrupar por</label>
+          <select id="a_gran"><option value="hora">Hora</option><option value="turno">Turno</option><option value="dia">Dia</option></select></div>
+        <div class="fld"><label for="a_tipo">Gráfico</label>
+          <select id="a_tipo"><option value="auto">Automático</option><option value="barras">Barras</option><option value="linhas">Linhas</option></select></div>
+        <div class="fld"><label for="a_lim">Parada acima de (min)</label><input type="number" id="a_lim" value="3" min="0.5" step="0.5"></div>
+        <div class="fld" style="min-width:270px"><label for="a_borda">Produção fora do horário principal</label>
+          <select id="a_borda"></select></div>
+        <button type="button" class="act pri" id="a_go">Atualizar</button>
+      </div>
+      <div class="sublbl">Máquinas na comparação</div>
+      <div class="opts" id="a_maqs"></div>
+      <div class="sublbl" style="margin-top:14px">Seções e camadas</div>
+      <div class="opts" id="a_ops"></div>
+      <div class="sublbl" style="margin-top:16px">Relatórios</div>
+      <div class="acts" style="margin-top:0">
+        <button type="button" class="act pri" id="r_a4">Relatório executivo A4</button>
+        <button type="button" class="act" id="r_wa">Resumo para WhatsApp</button>
+        <button type="button" class="act" id="r_em">Texto para e-mail</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="relbox">
+    <div class="acts" style="justify-content:flex-end;margin-bottom:12px">
+      <button type="button" class="act pri" id="r_print">Imprimir ou salvar em PDF</button>
+      <button type="button" class="act" id="r_close">Fechar</button>
+    </div>
+    <div id="rel"></div>
+  </div>
+
+  <div id="a_out"></div>
+  <div id="a_vazio" class="empty">Escolha ao menos uma máquina com dados importados e clique em Atualizar.</div>
+</div>
+
+<div class="view" id="v_importar">
+  <section>
+    <h2>Importar arquivos do historian</h2>
+    <p class="lede">Solte vários arquivos de uma vez. Cada registro é gravado por máquina e por dia — reimportar um período já carregado não duplica nada.</p>
+    <div id="drop" tabindex="0" role="button" aria-label="Escolher arquivos CSV">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><path d="M7 10l5-5 5 5"/><path d="M12 5v13"/></svg>
+      <div class="t1">Arraste os CSV aqui</div>
+      <div class="t2">ou clique para escolher — precisa de uma coluna de <code>tempo</code> e a tag do contador</div>
+    </div>
+    <input type="file" id="file" accept=".csv,.txt,text/csv" multiple>
+    <div class="card" style="margin-top:14px">
+      <div class="grid">
+        <div class="fld"><label for="i_fmt">Formato da data no arquivo</label>
+          <select id="i_fmt"><option value="auto">Detectar automaticamente</option><option value="mdy">MM/DD/AAAA (en-US)</option><option value="dmy">DD/MM/AAAA (pt-BR)</option></select></div>
+        <div class="fld"><label for="i_ct">Coluna de tempo</label><select id="i_ct"><option value="-1">Detectar</option></select></div>
+        <div class="fld"><label for="i_cv">Coluna do contador</label><select id="i_cv"><option value="-1">Detectar</option></select></div>
+      </div>
+    </div>
+    <div id="i_log" style="margin-top:16px"></div>
+  </section>
+</div>
+
+<div class="view" id="v_maquinas">
+  <section>
+    <h2>Máquinas cadastradas</h2>
+    <p class="lede">Cada máquina guarda o que um incremento do contador representa e a capacidade em peças por hora.</p>
+    <div id="m_lista"></div>
+    <div class="acts"><button type="button" class="act pri" id="m_novo">Cadastrar máquina</button></div>
+  </section>
+</div>
+
+<div class="view" id="v_turnos">
+  <section>
+    <h2>Turnos</h2>
+    <p class="lede">Os turnos definem o fechamento e o agrupamento. Turnos que viram a meia-noite são aceitos.</p>
+    <div id="t_lista"></div>
+    <div class="acts">
+      <button type="button" class="act pri" id="t_novo">Cadastrar turno</button>
+      <button type="button" class="act" id="t_padrao">Usar 3 turnos padrão</button>
+    </div>
+  </section>
+</div>
+
+<div class="view" id="v_dia">
+  <section>
+    <h2>Lançamentos manuais</h2>
+    <p class="lede">O que o contador não sabe: abono, hora extra, motivo de parada, refugo e retrabalho.</p>
+    <div class="card">
+      <div class="grid">
+        <div class="fld"><label for="d_tipo">Tipo</label><select id="d_tipo">
+          <option value="abono">Abono — desconta da meta</option>
+          <option value="extra">Hora extra — informativa</option>
+          <option value="parada">Parada justificada — motivo</option>
+          <option value="refugo">Refugo</option>
+          <option value="retrabalho">Retrabalho</option></select></div>
+        <div class="fld"><label for="d_maq">Máquina</label><select id="d_maq"></select></div>
+        <div class="fld"><label for="d_data">Data</label><input type="date" id="d_data"></div>
+        <div class="fld" id="w_ini"><label for="d_ini">Início</label><input type="time" id="d_ini" value="12:00"></div>
+        <div class="fld" id="w_min"><label for="d_min">Duração (min)</label><input type="number" id="d_min" value="30" min="1" step="5"></div>
+        <div class="fld hide" id="w_qtd"><label for="d_qtd">Quantidade</label><input type="number" id="d_qtd" value="0" min="0" step="1"></div>
+        <div class="fld hide" id="w_un"><label for="d_un">Unidade</label><select id="d_un">
+          <option value="pcs">Peças</option><option value="inc">Incrementos (caixas)</option></select></div>
+        <div class="fld"><label for="d_obs">Motivo / observação</label><input type="text" id="d_obs" placeholder="reunião, troca de bobina, falha de selagem..."></div>
+      </div>
+      <div class="acts"><button type="button" class="act pri" id="d_add">Lançar</button></div>
+      <p class="note" id="d_help"></p>
+    </div>
+    <h2 style="margin-top:26px">Registros</h2>
+    <div id="d_lista" style="margin-top:12px"></div>
+  </section>
+</div>
+
+<div class="view" id="v_dados">
+  <section>
+    <h2>Base de dados local</h2>
+    <p class="lede">Tudo fica no navegador deste computador. Faça backup se for trocar de máquina ou limpar o cache.</p>
+    <div class="kpis" id="db_kpis"></div>
+    <h2 style="margin-top:26px">Cobertura por máquina</h2>
+    <div class="tblwrap" style="margin-top:12px"><table id="db_tbl"></table></div>
+    <div class="acts">
+      <button type="button" class="act" id="db_exp">Exportar backup</button>
+      <button type="button" class="act" id="db_imp">Restaurar backup</button>
+      <button type="button" class="act dgr" id="db_del">Apagar dados de produção</button>
+    </div>
+    <input type="file" id="db_file" accept=".json">
+  </section>
+</div>
+
+<footer>
+  <span>Monitor de produção hora a hora</span>
+  <span>Os arquivos são lidos e guardados no seu navegador — nada é enviado para fora</span>
+</footer>
+</div>
+
+<dialog id="dlg"><form method="dialog" id="dlgform">
+  <div class="dlg-h"><h3 id="dlg_t"></h3><p id="dlg_p"></p></div>
+  <div class="dlg-b" id="dlg_b"></div>
+  <div class="dlg-f" id="dlg_f"></div>
+</form></dialog>
+<div id="toast"></div>
+<script src="js/00-core.js"></script>
+<script src="js/10-db.js"></script>
+<script src="js/20-csv.js"></script>
+<script src="js/30-import.js"></script>
+<script src="js/40-metrics.js"></script>
+<script src="js/50-render.js"></script>
+<script src="js/60-charts.js"></script>
+<script src="js/70-reports.js"></script>
+<script src="js/80-maquinas.js"></script>
+<script src="js/81-turnos.js"></script>
+<script src="js/82-lancamentos.js"></script>
+<script src="js/83-dados.js"></script>
+<script src="js/90-montagem.js"></script>
+<script src="js/99-boot.js"></script>
+</body>
+</html>
