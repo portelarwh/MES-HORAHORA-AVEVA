@@ -18,6 +18,7 @@ function cardsDe(A){
     producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
       eqInc
       +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
+      +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta, vindos depois de lacuna':'')
       +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
     /* O contador do historian indica a PRÓXIMA unidade: a leitura 21 significa
        20 caixas concluídas. Este cartão existe para o operador conferir isso
@@ -149,14 +150,15 @@ function tabelaTurnos(A){
 /* --- qualidade e validação ---------------------------------------------- */
 function painelQualidade(){
   let h='<thead><tr><th>Máquina</th><th>Classificação</th><th>Cobertura</th><th>Registros</th>'
-    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Não atribuído</th>'
+    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Data incerta</th><th>Não atribuído</th>'
     +'<th>Lacunas</th><th>Quebrados</th><th>Duplicados</th><th>Fora de ordem</th></tr></thead><tbody>';
   for(const A of LAST.AS){
     const q=A.qual;
     h+=`<tr><td><span class="swatch" style="background:${A.maq.cor};margin-right:7px"></span>${esc(A.maq.nome)}</td>`
       +`<td><span class="pill p-${q.cor==='n'?'w':q.cor}">${q.rotulo}</span></td>`
       +`<td>${fmtPct(q.cobertura)}</td><td>${nf(q.registros)}</td><td>${nf(q.semAlteracao)}</td>`
-      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td><td>${nf(q.naoAtribuido)}</td>`
+      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td>`
+      +`<td>${q.dataIncerta>0?nf(q.dataIncerta):'—'}</td><td>${q.naoAtribuido>0?nf(q.naoAtribuido):'—'}</td>`
       +`<td>${nf(q.lacunas)} · ${hDur(q.minutosSemDados)}</td>`
       +`<td>${nf(q.fracionados)}</td><td>${nf(q.duplicados)}</td><td>${nf(q.foraDeOrdem)}</td></tr>`;
   }
@@ -184,6 +186,9 @@ function rastreabilidade(A){
     ['Leitura do contador','a leitura indica a próxima unidade',
       fmtVal(t.leituraIni)+' → '+fmtVal(t.leituraFim)+' · inicia em '+nf(t.contagemInicial),
       nf(t.inc)+' concluídas'],
+    ['Incrementos contados','soma dos deltas a partir da segunda marcação',
+      nf(t.regs)+' registros'+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' fora da contagem':'')
+      +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta':''),nf(t.inc)],
     ['Período selecionado','fim − início',
       dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
     ['Tempo com dados','período − tempo sem dados',
@@ -298,6 +303,7 @@ function renderAnalise(){
   const s1=secao('Resumo do período',
     dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
     +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
+    +' · contagem: <b>'+esc(rotuloContagem(LAST.contagem))+'</b>'
     +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min');
   for(const A of AS){
     const c=A.maq,h=el('div');

@@ -48,7 +48,7 @@ function linhasRegistros(A,L){
     return `<tr><td>${dtBR(r.t)}</td><td>${nf(r.valor)}</td>`
       +`<td>${e?nf(e.delta):NAO_CALC}</td>`
       +`<td>${e?nf(e.contabiliza?e.delta*A.pc:0):NAO_CALC}</td>`
-      +`<td>${e?fmtSeg(e.gapS):NAO_CALC}</td>`
+      +`<td>${e?fmtIntervalo(e.gapS):NAO_CALC}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${tags}</td>`
       +`<td>${e?(e.contabiliza?'sim':'não'):'—'}</td></tr>`;
   }).join('');

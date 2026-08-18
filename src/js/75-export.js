@@ -22,19 +22,22 @@ function sufixoJanela(){
 const cabecalhoJanela=()=>[
   ['Periodo_inicio',dtBR(LAST.ini)],['Periodo_fim',dtBR(LAST.fim)],
   ['Base_de_calculo',rotuloBase(LAST.base)],
+  ['Contagem_dos_incrementos',rotuloContagem(LAST.contagem)],
   ['Limiar_parada_min',csvNum(LAST.lim,1)],['Limiar_sem_dados_min',csvNum(LAST.limSD,1)],
   ['Turno_desconsiderado',LAST.excl?(TUR.find(t=>t.id===LAST.excl)||{}).nome||LAST.excl:'nenhum'],
   ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
 ];
 
-const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc','Nao_atribuido',
+const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
+  'Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
   'Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
   'Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
-const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),nf0(l.naoAtrib),
+const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
+  nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
   csvPct(l.oee.marcacoes),csvPct(l.oee.programado),csvPct(l.oee.observado),

@@ -50,6 +50,9 @@ function hDur(min){
 }
 const fmtMin=m=>finito(m)?nf1(m)+' min':NAO_CALC;
 const fmtSeg=s=>finito(s)?nf1(s)+' s':NAO_CALC;
+/* Intervalo entre registros: segundos são legíveis até uma hora; acima disso a
+   lacuna noturna vira "52.324,2 s" e ninguém lê. */
+const fmtIntervalo=s=>!finito(s)?NAO_CALC:s>=3600?hDur(s/60):fmtSeg(s);
 
 /* --- razões e percentuais ----------------------------------------------- */
 /* Devolve null — e não 0 — quando a conta não pode ser feita. */
@@ -68,4 +71,4 @@ const cl=a=>a==null||!finito(a)?'n':a>=1?'g':a>=.85?'w':'r';
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
   NAO_CALC,finito,nf,nf1,nf2,pad2,pad3,hhmm,hhmmss,iso,brDate,ddmm,dtBR,dtCurto,
-  hm,mh,hDur,fmtMin,fmtSeg,razao,fmtPct,pct,fmtVal,cl};
+  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl};

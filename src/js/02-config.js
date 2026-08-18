@@ -53,6 +53,17 @@ const BASES=[
   ['operacional','Tempo rodando','tempo com dados menos abono e menos paradas'],
   ['parcial','Até o último registro','do início do período até a última marcação, menos abono']
 ];
+/* Como tratar o incremento cuja data é incerta: o que vem depois de uma lacuna
+   de dados e o que vem do registro anterior à janela. A primeira marcação nunca
+   tem incremento próprio — ela é a referência, e a contagem começa na segunda. */
+const CONTAGENS=[
+  ['tudo','Todo incremento conta, a partir da segunda marcação',
+   'a primeira marcação é só a referência; do segundo registro em diante todo delta entra na produção, no carimbo em que foi registrado'],
+  ['semLacuna','Não contar incrementos vindos depois de uma lacuna',
+   'incrementos que aparecem depois de ausência de dados, ou vindos do registro anterior à janela, ficam fora da produção e são reportados como não atribuídos']
+];
+const rotuloContagem=k=>(CONTAGENS.find(x=>x[0]===k)||CONTAGENS[0])[1];
+const descContagem=k=>(CONTAGENS.find(x=>x[0]===k)||CONTAGENS[0])[2];
 const rotuloBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[1];
 const descBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[2];
 
@@ -61,7 +72,7 @@ function prefsPadrao(){
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
   return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
-    limParada:3,limSemDados:30,borda:'todos',auto:false,autoSeg:120,
+    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',auto:false,autoSeg:120,
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
 
@@ -78,6 +89,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.cards))if(!CARDS.some(c=>c[0]===k))delete out.cards[k];
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
+  if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
@@ -97,4 +109,5 @@ const cardAtivo=k=>PREFS.cards[k]!==false;
 const secaoAtiva=k=>PREFS.secoes[k]!==false;
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
-  CARDS,OPCOES,BASES,prefsPadrao,mesclaPrefs,rotuloBase,descBase};
+  CARDS,OPCOES,BASES,CONTAGENS,prefsPadrao,mesclaPrefs,
+  rotuloBase,descBase,rotuloContagem,descContagem};

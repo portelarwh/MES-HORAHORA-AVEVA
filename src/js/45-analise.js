@@ -50,6 +50,7 @@ function guardarFiltros(){
   PREFS.limParada=+$('a_lim').value||3;
   PREFS.limSemDados=+$('a_limsd').value||30;
   PREFS.borda=$('a_borda').value||'todos';
+  PREFS.contagem=$('a_contagem').value||'tudo';
   salvarPrefs();
 }
 
@@ -97,7 +98,7 @@ async function rodarAnalise(opts){
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
-      limSemDadosMin:limSD,ajustes:AJU,base}));
+      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem}));
   }
   if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
@@ -123,7 +124,7 @@ async function rodarAnalise(opts){
 
   const nova=assinaturaDe(AS),mudou=nova!==ASSINATURA;
   ASSINATURA=nova;
-  LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,
+  LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,contagem:PREFS.contagem,
     ini:J.ini,fim:J.fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
     geradoEm:new Date(),dadosMudaram:mudou};
   protegido('a análise',renderAnalise,()=>{$('a_out').innerHTML=
