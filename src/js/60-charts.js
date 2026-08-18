@@ -1,4 +1,6 @@
-/* 60-charts.js — Gráfico de produção e faixa de cadência em canvas. */
+/* 60-charts.js — Gráfico de produção e faixa de cadência, em canvas puro.
+   Sem biblioteca externa: rede corporativa costuma bloquear CDN e o arquivo
+   único precisa funcionar offline. */
 "use strict";
 
 function setup(cv,h,forcaW){
@@ -9,19 +11,20 @@ function setup(cv,h,forcaW){
   const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
   return{x,w,h};
 }
-function desenhar(){if(!LAST)return;if($('ch'))grafico($('ch'),null,null);if($('tl'))cadencia();}
+function desenhar(){if(!LAST)return;if($('ch'))protegido('o gráfico',()=>grafico($('ch'),null,null));
+  if($('tl'))protegido('a cadência',cadencia);}
 
 function grafico(cv,forcaW,forcaH){
   const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706'}:TH();
   const {AS,B}=LAST,{x,w,h}=setup(cv,forcaH||340,forcaW);
-  const acum=opAtivo('acum'),rot=opAtivo('rot');
-  const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].janela>0));
+  const acum=secaoAtiva('acum'),rot=secaoAtiva('rot');
+  const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
-    x.fillText('Sem dados no período selecionado',w/2,h/2);return}
+    x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
   const series=AS.map(A=>{let ac=0;return idx.map(i=>{ac+=A.linhas[i].pcs;return acum?ac:A.linhas[i].pcs})});
-  const metaMax=Math.max(...AS.map(a=>a.maq.meta)),capMax=Math.max(...AS.map(a=>a.maq.cap));
+  const metaMax=Math.max(...AS.map(a=>a.maq.meta||0)),capMax=Math.max(...AS.map(a=>a.maq.cap||0));
   let ymax=Math.max(...series.flat(),1);
-  if(!acum){if(opAtivo('meta'))ymax=Math.max(ymax,metaMax);if(opAtivo('cap'))ymax=Math.max(ymax,capMax)}
+  if(!acum){if(secaoAtiva('meta'))ymax=Math.max(ymax,metaMax);if(secaoAtiva('cap'))ymax=Math.max(ymax,capMax)}
   ymax*=1.14;
   const pad={t:16,r:14,b:idx.length>26?50:44,l:forcaW?54:68},iw=w-pad.l-pad.r,ih=h-pad.t-pad.b;
   const Y=v=>pad.t+ih-(v/ymax)*ih,bw=iw/idx.length;
@@ -33,7 +36,7 @@ function grafico(cv,forcaW,forcaH){
     x.strokeStyle=T.line;x.lineWidth=1;x.beginPath();x.moveTo(pad.l,Y(v));x.lineTo(w-pad.r,Y(v));x.stroke();
     x.fillStyle=T.tx3;x.textAlign='right';x.fillText(v>=1000?nf(v/1000)+'k':nf(v),pad.l-9,Y(v));
   }
-  const tipo=$('a_tipo').value;
+  const tipo=PREFS.tipo;
   const barras=tipo==='barras'||(tipo==='auto'&&!acum&&idx.length<=26);
   if(barras){
     const gap=Math.min(4,bw*.06),tot=bw*.66,bwid=Math.max(2,(tot-gap*(AS.length-1))/AS.length);
@@ -63,13 +66,13 @@ function grafico(cv,forcaW,forcaH){
     if(B[i].dia){x.fillStyle=T.tx3;x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
       x.fillText(B[i].dia,cx,h-pad.b+29)}
   });
-  if(!acum&&opAtivo('cap')){
+  if(!acum&&secaoAtiva('cap')&&capMax>0){
     x.strokeStyle=T.tx3;x.lineWidth=1.4;x.setLineDash([]);
     x.beginPath();x.moveTo(pad.l,Y(capMax));x.lineTo(w-pad.r,Y(capMax));x.stroke();
     x.fillStyle=T.tx3;x.textAlign='left';x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
     x.fillText('capacidade '+nf(capMax/1000)+'k',pad.l+5,Y(capMax)-8);
   }
-  if(!acum&&opAtivo('meta')){
+  if(!acum&&secaoAtiva('meta')&&metaMax>0){
     x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);
     x.beginPath();x.moveTo(pad.l,Y(metaMax));x.lineTo(w-pad.r,Y(metaMax));x.stroke();x.setLineDash([]);
     x.fillStyle=T.meta;x.textAlign='left';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
@@ -77,25 +80,27 @@ function grafico(cv,forcaW,forcaH){
   }
 }
 
-/* cadência com eixo comprimido nas janelas com dados */
+/* --- faixa de cadência ---------------------------------------------------
+   O eixo é comprimido nos trechos com cobertura: dias inteiros sem dado viram
+   um divisor tracejado em vez de esticarem o eixo. */
 function segmentos(){
   const {AS}=LAST,br=[];
-  for(const A of AS)for(const j of A.janelas)br.push([j.ini,j.fim]);
+  for(const A of AS)for(const g of A.cobertura)br.push([g.a,g.b]);
+  if(!br.length)br.push([LAST.ini,LAST.fim]);
   br.sort((a,b)=>a[0]-b[0]);
   const m=[];
   for(const s of br){
-    const pad=90000;
-    const a=s[0]-pad,b=s[1]+pad;
+    const folga=90000,a=s[0]-folga,b=s[1]+folga;
     if(m.length&&a<=m[m.length-1][1]+300000)m[m.length-1][1]=Math.max(m[m.length-1][1],b);
     else m.push([a,b]);
   }
   let acc=0;
-  return m.map(s=>{const d=s[1]-s[0];const o={a:s[0],b:s[1],off:acc,dur:d};acc+=d;return o})
+  return m.map(s=>{const d=Math.max(1,s[1]-s[0]);const o={a:s[0],b:s[1],off:acc,dur:d};acc+=d;return o})
     .reduce((o,s)=>{o.segs.push(s);o.total=s.off+s.dur;return o},{segs:[],total:0});
 }
 function cadencia(){
   const T=TH(),{AS}=LAST,S=segmentos();
-  if(!S.segs.length)return;
+  if(!S.segs.length||!S.total)return;
   const {x,w,h}=setup($('tl'),52*AS.length+58);
   const pad={t:26,r:14,l:14},iw=w-pad.l-pad.r;
   const X=t=>{
@@ -106,7 +111,6 @@ function cadencia(){
     return pad.l+iw;
   };
   x.textBaseline='middle';
-  // faixa de turnos
   if(LAST.BT.length){
     LAST.BT.forEach((t,i)=>{
       const a=X(t.a),b=X(t.b);
@@ -121,15 +125,24 @@ function cadencia(){
     const top=pad.t+k*52,bot=top+38;
     x.fillStyle=T.card2;
     if(x.roundRect){x.beginPath();x.roundRect(pad.l,top,iw,bot-top,6);x.fill()}else x.fillRect(pad.l,top,iw,bot-top);
+    /* ausência de dados: hachura neutra, nunca a cor de parada */
+    for(const g of A.lacunas){
+      const a=X(g.a),b=X(g.b);if(b-a<.5)continue;
+      x.save();x.beginPath();x.rect(a,top,Math.max(1,b-a),bot-top);x.clip();
+      x.strokeStyle=T.tx3;x.globalAlpha=.30;x.lineWidth=1;
+      for(let p=a-(bot-top);p<b+(bot-top);p+=6){x.beginPath();x.moveTo(p,bot);x.lineTo(p+(bot-top),top);x.stroke()}
+      x.restore();x.globalAlpha=1;
+    }
     for(const p of A.paradas){
-      const a=X(p.ini),b=X(p.fim);
+      const a=X(p.a),b=X(p.b);
       x.fillStyle=T.bad;x.globalAlpha=.22;x.fillRect(a,top,Math.max(1.6,b-a),bot-top);x.globalAlpha=1;
       if(b-a>34){x.fillStyle=T.bad;x.textAlign='center';x.font='600 9.5px "IBM Plex Mono",monospace';
         x.fillText(nf1(p.min),(a+b)/2,top+9)}
     }
-    const mx=Math.max(1,...A.ev.map(e=>e.inc));
-    for(const e of A.ev){
-      const px=X(e.t),al=Math.min(1,e.inc/mx);
+    const mx=Math.max(1,...A.eventos.map(e=>e.delta));
+    for(const e of A.eventos){
+      if(!e.contabiliza||e.delta<=0)continue;
+      const px=X(e.t),al=Math.min(1,e.delta/mx);
       x.strokeStyle=A.maq.cor;x.globalAlpha=.4+al*.5;x.lineWidth=1;
       x.beginPath();x.moveTo(px,bot-2);x.lineTo(px,bot-2-(bot-top-6)*(.22+al*.72));x.stroke();
     }
@@ -137,7 +150,6 @@ function cadencia(){
     x.fillStyle=A.maq.cor;x.textAlign='left';x.font='600 11.5px Inter,sans-serif';
     x.fillText(A.maq.nome,pad.l+7,top+9);
   });
-  // eixo
   const y=pad.t+AS.length*52+4;
   S.segs.forEach((s,i)=>{
     const passo=s.dur>36*3600000?21600000:(s.dur>10*3600000?7200000:3600000);
@@ -149,7 +161,7 @@ function cadencia(){
       x.fillStyle=T.tx3;x.textAlign='center';x.font='500 10.5px "IBM Plex Mono",monospace';
       x.fillText(pad2(d.getHours())+'h',px,y+4);
       if(d.getHours()===0||t===d0.getTime()){x.fillStyle=T.tx2;x.font='600 9.5px Inter,sans-serif';
-        x.fillText(pad2(d.getDate())+'/'+pad2(d.getMonth()+1),px,y+16)}
+        x.fillText(ddmm(d),px,y+16)}
     }
     if(i<S.segs.length-1){
       const px=pad.l+((s.off+s.dur)/S.total)*iw;

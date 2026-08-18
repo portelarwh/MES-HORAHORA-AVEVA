@@ -1,0 +1,37 @@
+/* 06-detalhe.css — Linhas expansíveis, subtabela de registros, paginação
+   e ajustes de leitura das tabelas largas. */
+
+/* Nenhuma célula quebra no meio de um número ou de um par valor+unidade:
+   é o que evitava a leitura "concatenada" nas tabelas com muitas colunas. */
+.tblwrap td,.tblwrap th{white-space:nowrap}
+.tblwrap td:first-child{white-space:normal;min-width:150px}
+.tblwrap table{min-width:1040px}
+.pill+.pill,.pill+.tag,.tag+.tag{margin-left:5px}
+td .pill{white-space:nowrap}
+
+.pill.p-n{background:var(--card2);color:var(--tx3);border:1px solid var(--line)}
+.kpi.n .dot{background:var(--tx3)}
+.kpi.n .v{color:var(--tx2)}
+
+tr.exp{cursor:pointer}
+tr.exp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+tr.exp .cx{display:inline-block;width:12px;color:var(--tx3);font-size:11px;transition:color .15s}
+tr.exp[aria-expanded="true"]{background:var(--accent-bg)}
+tr.exp[aria-expanded="true"] .cx{color:var(--accent)}
+tr.det>td{padding:0;background:var(--card2);border-bottom:1px solid var(--line)}
+tr.det:hover>td{background:var(--card2)}
+
+.subwrap{padding:12px 14px 14px;overflow-x:auto}
+.subtit{font-size:12.5px;color:var(--tx2);margin-bottom:9px;white-space:normal}
+table.sub{min-width:720px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:8px}
+table.sub th{font-size:10.5px;padding:7px 10px}
+table.sub td{padding:6px 10px;font-size:12.8px}
+table.sub tbody tr:last-child td{border-bottom:0}
+
+.pagbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:11px}
+.pagbar .pginfo{font-size:12.5px;color:var(--tx3)}
+
+@media(max-width:620px){
+  .tblwrap td:first-child{min-width:120px}
+  .bar-tools .fld{min-width:130px}
+}

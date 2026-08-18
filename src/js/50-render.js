@@ -1,230 +1,351 @@
-/* 50-render.js — Montagem dos cartões, tabelas e diagnóstico. */
+/* 50-render.js — Cartões, fechamento por turno, qualidade, validação,
+   diagnóstico e rastreabilidade. Só monta HTML a partir do que 40/41
+   calcularam: nenhuma fórmula é refeita aqui. */
 "use strict";
 
-const OPCOES=[['meta','Meta',1],['cap','Capacidade',1],['rot','Rótulos',1],['acum','Acumulado',0],
-  ['turno','Fechamento por turno',1],['cad','Cadência',1],['tab','Detalhe por período',1],['dgn','Diagnóstico',1]];
-const opAtivo=k=>{const i=document.querySelector('#a_ops input[value="'+k+'"]');return i?i.checked:false};
+const alvo=(r,a)=>r==null?null:r/a;
+const chip=A=>`<span class="tag"><span class="swatch" style="background:${A.maq.cor};margin-right:5px"></span>${esc(A.maq.nome)}</span>`;
+const nomeUnid=c=>c.modo==='unidade'?'incremento':c.unid;
+const plural=(n,u)=>nf(n)+' '+esc(u)+(n===1?'':'s');
 
+/* --- cartões ------------------------------------------------------------- */
+function cardsDe(A){
+  const c=A.maq,t=A.tot,q=A.qual,u=nomeUnid(c),bs=rotuloBase(t.base);
+  const eqInc=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(u)+' = '+nf(A.pc)+' peças';
+  const oeeCard=(id,tit,r,tempo,extra)=>[id,tit,fmtPct(r),
+    tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
+  const M={
+    producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
+      eqInc+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
+      'primeiro registro dentro do período','o',
+      t.primeiroReg==null?'nenhum registro na janela'
+        :'começou '+hDur((t.primeiroReg-t.a)/60000)+' depois do início do período'],
+    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg),
+      'último registro dentro do período','o',
+      t.ultimoReg==null?'nenhum registro na janela'
+        :'faltam '+hDur((t.b-t.ultimoReg)/60000)+' para o fim do período'],
+    periodo:()=>['periodo','Período selecionado',hDur(t.dur),
+      dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),'c','programado '+hDur(t.programado)+' (menos abono)'],
+    dados:()=>['dados','Tempo com dados',hDur(t.comDados),'cobertura '+fmtPct(t.cobertura),
+      cl(t.cobertura),'observado '+hDur(t.observado)+' · rodando '+hDur(t.operacional)],
+    semdados:()=>['semdados','Tempo sem dados',hDur(t.semDados),
+      t.nLac+' lacuna'+(t.nLac===1?'':'s')+' no período',t.semDados>0?'w':'g',
+      'não é parada: é ausência de registro e fica fora do denominador observado'],
+    meta:()=>['meta','Meta proporcional',fmtVal(t.planMetaBase)+' peças',
+      'atingimento '+fmtPct(t.atingBase),cl(t.atingBase),
+      nf(c.meta)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs],
+    oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
+      fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'),
+    oeeprog:()=>oeeCard('oeeprog','OEE programado',t.oee.programado,t.programado,'período selecionado menos abono'),
+    oeeobs:()=>oeeCard('oeeobs','OEE observado',t.oee.observado,t.observado,'só o tempo coberto por registros'),
+    oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
+    oeeparcial:()=>oeeCard('oeeparcial','OEE parcial',t.oee.parcial,t.parcial,
+      t.ultimoReg==null?'sem registro no período':'do início do período até '+dtBR(t.ultimoReg,'min')),
+    parado:()=>['parado','Tempo parado',fmtMin(t.parado),
+      t.nPar+' parada'+(t.nPar===1?'':'s')+' acima de '+nf1(A.limParadaMin)+' min',
+      cl(alvo(t.disp,1)),'disponibilidade '+fmtPct(t.disp)],
+    disp:()=>['disp','Disponibilidade',fmtPct(t.disp),'rodando ÷ observado',cl(t.disp),
+      hDur(t.operacional)+' de '+hDur(t.observado)],
+    ritmo:()=>['ritmo','Ritmo médio',fmtVal(t.ritmo),'peças/h na janela com dados',
+      cl(alvo(t.ritmo,c.meta)),'sem paradas '+fmtVal(t.ritmoOper)+' peças/h'],
+    interv:()=>['interv','Intervalo entre '+esc(u)+'s',fmtSeg(t.interv),
+      'média na janela com dados','c',
+      (t.intervOper!=null?'sem paradas '+fmtSeg(t.intervOper)+' · ':'')
+      +(A.tcP10!=null?'melhor sustentado '+fmtSeg(A.tcP10):'')],
+    qualidade:()=>['qualidade','Qualidade dos dados',q.rotulo,
+      'cobertura '+fmtPct(q.cobertura)+' · '+nf(q.registros)+' registros',q.cor,
+      [q.lacunas?q.lacunas+' lacuna(s)':'',q.resets?q.resets+' reset(s)':'',
+       q.fracionados?q.fracionados+' valor(es) quebrado(s)':'',
+       q.foraDeOrdem?q.foraDeOrdem+' fora de ordem':''].filter(Boolean).join(' · ')||'sem anomalia detectada'],
+    abono:()=>(t.abono>0||t.extra>0)?['abono','Abono / hora extra',
+      nf1(t.abono)+' / '+nf1(t.extra),'minutos','o',
+      (t.abono>0?'abono sai da meta e do planejado':'')
+      +(t.extra>0?(t.abono>0?' · ':'')+'extra ≈ '+fmtVal(t.ritmoOper==null?null:t.ritmoOper*t.extra/60)+' peças':'')]:null,
+    refugo:()=>(t.refugo>0||t.retrab>0)?['refugo','Refugo / retrabalho',
+      nf(t.refugo)+' / '+nf(t.retrab),'peças lançadas',cl(razao(t.bom,t.pcs)),
+      'produção boa '+nf(t.bom)+' · OEE líquido '+fmtPct(t.oeeLiq)]:null,
+    paradajust:()=>t.paradaJust>0?['paradajust','Parada justificada',fmtMin(t.paradaJust),
+      t.motivos.length?esc(t.motivos.slice(0,2).join(', ')):'sem motivo informado','o',
+      fmtPct(razao(t.paradaJust,t.parado))+' do tempo parado está justificado']:null
+  };
+  const out=[];
+  for(const [id] of CARDS){
+    if(!cardAtivo(id)||!M[id])continue;
+    const k=M[id]();if(k)out.push(k);
+  }
+  return out;
+}
 function cardsHTML(A){
-  const c=A.maq,t=A.tot,pc=pecas(c);
-  const unid=c.modo==='unidade'?'incremento':c.unid;
-  const eq=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(unid)+' = '+nf(pc)+' peças';
-  const K=[];
-  K.push(['Produção',nf(t.pcs)+' peças',nf(t.inc)+' '+esc(unid)+(t.inc===1?'':'s'),'c',eq]);
-  K.push(['Meta do período',nf(t.planMeta)+' peças',
-    'atingimento '+nf1(t.ating*100)+'% · '+(t.pcs>=t.planMeta?'+':'')+nf(t.pcs-t.planMeta),cl(t.ating),
-    nf(c.meta)+' peças/h × '+hDur(t.planej)+' disponíveis']);
-  K.push(['OEE do período',nf1(t.oee*100)+'%','produzido ÷ planejado',cl(t.oee/.85),
-    nf(t.pcs)+' ÷ '+nf(t.planCap)+' ('+nf(c.cap)+' peças/h × '+hDur(t.planej)+')']);
-  K.push(['OEE parcial',nf1(t.oeeParcial*100)+'%','até o último registro '+(t.ultimo?hhmm(new Date(t.ultimo)):'—'),
-    cl(t.oeeParcial/.85),'janela de '+hDur(t.parcialMin)+' desde o primeiro registro']);
-  K.push(['Janela de dados',hDur(t.janela),
-    (t.ultimo?hhmm(new Date(A.primeiro))+' às '+hhmm(new Date(A.ultimo)):'—'),'o',
-    'disponível '+hDur(t.planej)+' · rodando '+hDur(t.oper)]);
-  K.push(['Tempo parado',nf1(t.parauto)+' min',t.npar+' paradas acima do limiar',cl(1-t.parauto/Math.max(1,t.planej)),
-    'disponibilidade '+nf1(t.disp*100)+'%']);
-  K.push(['Intervalo entre '+esc(unid)+'s',t.interv?nf1(t.interv)+' s':'—',
-    'média na janela de dados','c',
-    (t.intervOper?'sem paradas '+nf1(t.intervOper)+' s · ':'')+(A.tcP10?'melhor sustentado '+nf1(A.tcP10)+' s':'')]);
-  K.push(['Ritmo médio',nf(t.ritmo),'peças/h na janela de dados',cl(t.ritmo/c.meta),
-    'sem paradas '+nf(t.ritmoOper)+' peças/h']);
-  if(t.abono>0||t.extra>0)
-    K.push(['Abono / hora extra',nf1(t.abono)+' / '+nf1(t.extra),'minutos','o',
-      (t.abono>0?'abono descontado da meta e do planejado':'')+(t.extra>0?(t.abono>0?' · ':'')+'extra ≈ '+nf(t.ritmoOper*t.extra/60)+' peças':'')]);
-  if(t.refugo>0||t.retrab>0)
-    K.push(['Refugo / retrabalho',nf(t.refugo)+' / '+nf(t.retrab),'peças lançadas',cl(t.bom/Math.max(1,t.pcs)),
-      'produção boa '+nf(t.bom)+' · OEE líquido '+nf1(t.oeeLiq*100)+'%']);
-  if(t.paradaJust>0)
-    K.push(['Parada justificada',nf1(t.paradaJust)+' min',
-      t.motivos.length?t.motivos.slice(0,2).join(', '):'sem motivo informado','o',
-      nf1(t.paradaJust/Math.max(1,t.parauto)*100)+'% do tempo parado está justificado']);
-  return K.map(([k,v,u,x,e])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div>`
+  const K=cardsDe(A);
+  if(!K.length)return '<div class="empty">Nenhum cartão selecionado. Use o botão “Escolher cartões”.</div>';
+  return K.map(([id,k,v,u,x,e])=>`<div class="kpi ${x}" data-card="${id}"><div class="k"><span class="dot"></span>${k}</div>`
     +`<div class="v">${v}</div><div class="u">${u}</div>${e?`<div class="eq">${e}</div>`:''}</div>`).join('');
 }
 
 function seta(atual,ant){
-  if(ant==null||ant===0)return '<span class="arw eq">—</span>';
+  if(ant==null||!Number.isFinite(ant)||ant===0)return '<span class="arw eq">'+NAO_CALC+'</span>';
   const d=(atual-ant)/ant*100;
   if(Math.abs(d)<1)return '<span class="arw eq">≈ 0%</span>';
   return `<span class="arw ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${nf1(Math.abs(d))}%</span>`;
 }
+const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
 
-function tabelaDetalhe(A){
-  const c=A.maq,unid=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
-  let h='<thead><tr>'
-    +'<th rowspan="2">Período</th><th rowspan="2">Regs</th>'
-    +'<th class="grp" colspan="2">Produção</th>'
-    +'<th class="grp" colspan="3">Desempenho</th>'
-    +'<th class="grp" colspan="3">Tempo (min)</th>'
-    +'<th class="grp" colspan="2">Cadência</th></tr><tr>'
-    +`<th class="sep">${unid}</th><th>Peças</th>`
-    +'<th class="sep">vs anterior</th><th>Meta</th><th>OEE</th>'
-    +'<th class="sep">Disponível</th><th>Parado</th><th>Abono</th>'
-    +'<th class="sep">Ritmo/h</th><th>Interv. (s)</th></tr></thead><tbody>';
-  const vis=A.linhas.filter(l=>l.janela>0||l.abono>0);
-  let ant=null;
-  for(const l of vis){
-    h+=`<tr><td>${(l.bk.dia&&LAST.gran!=='dia'?l.bk.dia+' ':'')+l.bk.rot}</td><td>${l.ap}</td>`
-      +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
-      +`<td class="sep">${seta(l.pcs,ant)}</td>`
-      +`<td><span class="pill p-${cl(l.ating)}">${nf1(l.ating*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.oee/.85)}">${nf1(l.oee*100)}%</span></td>`
-      +`<td class="sep">${nf1(l.planej)}</td><td>${l.parauto>0?nf1(l.parauto):'—'}</td><td>${l.abono>0?nf1(l.abono):'—'}</td>`
-      +`<td class="sep">${nf(l.ritmo)}</td><td>${l.interv?nf1(l.interv):'—'}</td></tr>`;
-    ant=l.pcs;
-  }
-  const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total</td><td>${nf(t.ap)}</td>`
-    +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td>`
-    +`<td class="sep">—</td><td>${nf1(t.ating*100)}%</td><td>${nf1(t.oee*100)}%</td>`
-    +`<td class="sep">${nf1(t.planej)}</td><td>${nf1(t.parauto)}</td><td>${nf1(t.abono)}</td>`
-    +`<td class="sep">${nf(t.ritmo)}</td><td>${t.interv?nf1(t.interv):'—'}</td></tr></tfoot>`;
-}
-
+/* --- fechamento por turno ------------------------------------------------ */
 function tabelaTurnos(A){
-  const c=A.maq,unid=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
+  const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Turno</th>'
+    +'<th rowspan="2">Turno</th><th rowspan="2">Status</th>'
     +'<th class="grp" colspan="2">Produção</th>'
-    +'<th class="grp" colspan="3">Horas trabalhadas</th>'
-    +'<th class="grp" colspan="2">Planejado (peças)</th>'
-    +'<th class="grp" colspan="2">OEE</th>'
-    +'<th rowspan="2">Meta</th></tr><tr>'
-    +`<th class="sep">${unid}</th><th>Peças</th>`
-    +'<th class="sep">Turno</th><th>Com dados</th><th>Parado</th>'
-    +'<th class="sep">Turno cheio</th><th>Até último reg.</th>'
-    +'<th class="sep">Fechado</th><th>Parcial</th></tr></thead><tbody>';
-  let T={inc:0,pcs:0,dur:0,jan:0,par:0,planT:0,planP:0,meta:0};
+    +'<th class="grp" colspan="4">Tempo (h)</th>'
+    +'<th class="grp" colspan="3">OEE</th>'
+    +'<th rowspan="2">Meta</th><th rowspan="2">Qualidade</th></tr><tr>'
+    +`<th class="sep">${u}</th><th>Peças</th>`
+    +'<th class="sep">No período</th><th>Com dados</th><th>Sem dados</th><th>Parado</th>'
+    +'<th class="sep">Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
+  const T={inc:0,pcs:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,mProg:0};
+  if(!A.turnos.length)h+='<tr><td colspan="12" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
   for(const l of A.turnos){
-    const planP=c.cap*(l.parcialMin/60);
-    h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}${l.bk.anexado?' <span class="tag">+ borda</span>':''}</td>`
+    h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}`
+      +`${l.bk.anexado?' <span class="tag">+ turno anexado</span>':''}`
+      +`${l.bk.recortado?' <span class="tag">recortado</span>':''}</td>`
+      +`<td style="text-align:left"><span class="pill p-${l.status.k==='completo'?'g':l.status.k==='semdados'?'r':'w'}">${l.status.rot}</span></td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
-      +`<td class="sep">${hDur(l.durTurno)}</td><td>${hDur(l.janela)}</td><td>${nf1(l.parauto)} min</td>`
-      +`<td class="sep">${nf(l.planTurno)}</td><td>${nf(planP)}</td>`
-      +`<td class="sep"><span class="pill p-${cl(l.oeeTurno/.85)}">${nf1(l.oeeTurno*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.oeeParcial/.85)}">${nf1(l.oeeParcial*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.ating)}">${nf1(l.ating*100)}%</span></td></tr>`;
-    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.durTurno;T.jan+=l.janela;T.par+=l.parauto;
-    T.planT+=l.planTurno;T.planP+=planP;T.meta+=l.planMeta;
+      +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
+      +`<td class="sep">${pill(l.oee.programado,.85)}</td><td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td>${pill(l.atingBase)}</td>`
+      +`<td>${fmtPct(l.cobertura)}</td></tr>`;
+    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.dur;T.com+=l.comDados;T.sem+=l.semDados;T.par+=l.parado;
+    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;T.mProg+=l.planMetaBase||0;
   }
-  return h+`</tbody><tfoot><tr><td>Total geral</td>`
+  return h+`</tbody><tfoot><tr><td>Total geral</td><td></td>`
     +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td>`
-    +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.jan)}</td><td>${nf1(T.par)} min</td>`
-    +`<td class="sep">${nf(T.planT)}</td><td>${nf(T.planP)}</td>`
-    +`<td class="sep">${T.planT>0?nf1(T.pcs/T.planT*100):'—'}%</td>`
-    +`<td>${T.planP>0?nf1(T.pcs/T.planP*100):'—'}%</td>`
-    +`<td>${T.meta>0?nf1(T.pcs/T.meta*100):'—'}%</td></tr></tfoot>`;
+    +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.com)}</td><td>${hDur(T.sem)}</td><td>${fmtMin(T.par)}</td>`
+    +`<td class="sep">${pct(T.pcs,T.pProg)}</td><td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
+    +`<td>${pct(T.pcs,T.mProg)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
 }
 
-function chip(A){return `<span class="tag"><span class="swatch" style="background:${A.maq.cor};margin-right:5px"></span>${esc(A.maq.nome)}</span>`;}
+/* --- qualidade e validação ---------------------------------------------- */
+function painelQualidade(){
+  let h='<thead><tr><th>Máquina</th><th>Classificação</th><th>Cobertura</th><th>Registros</th>'
+    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Não atribuído</th>'
+    +'<th>Lacunas</th><th>Quebrados</th><th>Duplicados</th><th>Fora de ordem</th></tr></thead><tbody>';
+  for(const A of LAST.AS){
+    const q=A.qual;
+    h+=`<tr><td><span class="swatch" style="background:${A.maq.cor};margin-right:7px"></span>${esc(A.maq.nome)}</td>`
+      +`<td><span class="pill p-${q.cor==='n'?'w':q.cor}">${q.rotulo}</span></td>`
+      +`<td>${fmtPct(q.cobertura)}</td><td>${nf(q.registros)}</td><td>${nf(q.semAlteracao)}</td>`
+      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td><td>${nf(q.naoAtribuido)}</td>`
+      +`<td>${nf(q.lacunas)} · ${hDur(q.minutosSemDados)}</td>`
+      +`<td>${nf(q.fracionados)}</td><td>${nf(q.duplicados)}</td><td>${nf(q.foraDeOrdem)}</td></tr>`;
+  }
+  return h+'</tbody>';
+}
+function painelValidacao(){
+  const V=LAST.AS.flatMap(A=>A.valid);
+  if(!V.length)return '<div class="dg ok"><span class="lb">OK</span><div><div class="tt">Nenhum problema encontrado</div>'
+    +'<div class="bd">Cobertura, cadastro e limiares estão consistentes no período analisado.</div></div></div>';
+  const ordem={crit:0,aten:1,info:2};
+  return V.slice().sort((a,b)=>ordem[a.nivel]-ordem[b.nivel]).map(v=>
+    `<div class="dg ${v.nivel}"><span class="lb">${esc(v.codigo)}</span><div>`
+    +`<div class="mq">${esc(v.maquina)}</div><div class="tt">${esc(v.titulo)}</div>`
+    +`<div class="bd">${esc(v.detalhe)}</div></div></div>`).join('');
+}
 
+/* --- rastreabilidade ----------------------------------------------------- */
+/* Mostra a conta com os números substituídos, para que qualquer indicador
+   possa ser refeito na mão em reunião. */
+function rastreabilidade(A){
+  const c=A.maq,t=A.tot,bs=rotuloBase(t.base);
+  const L=[
+    ['Peças produzidas','incrementos × peças por incremento',
+      nf(t.inc)+' × '+nf(A.pc),nf(t.pcs)+' peças'],
+    ['Período selecionado','fim − início',
+      dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
+    ['Tempo com dados','período − tempo sem dados',
+      hDur(t.dur)+' − '+hDur(t.semDados),hDur(t.comDados)],
+    ['Tempo programado','período − abono',
+      hDur(t.dur)+' − '+fmtMin(t.abono),hDur(t.programado)],
+    ['Tempo observado','tempo com dados − abono coberto',
+      hDur(t.comDados)+' − '+fmtMin(t.abonoCoberto),hDur(t.observado)],
+    ['Tempo operacional','observado − paradas detectadas',
+      hDur(t.observado)+' − '+fmtMin(t.parado),hDur(t.operacional)],
+    ['Tempo parcial','última marcação − início do período − abono',
+      t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.a,'min'),hDur(t.parcial)],
+    ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
+      nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
+    ['Atingimento','peças ÷ meta proporcional',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planMetaBase),fmtPct(t.atingBase)],
+    ['Planejado pela capacidade ('+bs+')','capacidade por hora × base ÷ 60',
+      nf(c.cap)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planCapBase)+' peças'],
+    ['OEE — '+bs,'peças ÷ planejado',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCapBase),fmtPct(t.oeeBase)],
+    ['OEE programado','peças ÷ (capacidade × programado ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.programado),fmtPct(t.oee.programado)],
+    ['OEE observado','peças ÷ (capacidade × observado ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.observado),fmtPct(t.oee.observado)],
+    ['OEE operacional','peças ÷ (capacidade × operacional ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.operacional),fmtPct(t.oee.operacional)],
+    ['OEE parcial','peças ÷ (capacidade × parcial ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.parcial),fmtPct(t.oee.parcial)],
+    ['Disponibilidade','operacional ÷ observado',
+      hDur(t.operacional)+' ÷ '+hDur(t.observado),fmtPct(t.disp)],
+    ['Cobertura de dados','tempo com dados ÷ período',
+      hDur(t.comDados)+' ÷ '+hDur(t.dur),fmtPct(t.cobertura)],
+    ['Ritmo médio','peças ÷ tempo com dados em horas',
+      nf(t.pcs)+' ÷ '+nf2(t.comDados/60),fmtVal(t.ritmo)+' peças/h'],
+    ['Intervalo entre incrementos','tempo com dados em segundos ÷ incrementos',
+      nf(t.comDados*60)+' ÷ '+nf(t.inc),fmtSeg(t.interv)]
+  ];
+  return '<thead><tr><th>Indicador</th><th>Fórmula</th><th>Números usados</th><th>Resultado</th></tr></thead><tbody>'
+    +L.map(([a,b,c2,d])=>`<tr><td>${a}</td><td style="text-align:left;font-family:Inter,sans-serif">${b}</td>`
+      +`<td>${c2}</td><td><b>${d}</b></td></tr>`).join('')+'</tbody>';
+}
+
+/* --- diagnóstico --------------------------------------------------------- */
 function diagnosticos(){
   const {AS}=LAST,D=[];
   for(const A of AS){
-    const c=A.maq,t=A.tot,mq=chip(A);
-    D.push([t.ating>=1?'ok':t.ating>=.9?'aten':'crit','META',mq,
-      t.ating>=1?'Meta do período atingida':'Meta do período não atingida',
-      `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${nf(t.planMeta)}</b> planejadas pela meta — <b>${nf1(t.ating*100)}%</b>. `
-      +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.planej)} de tempo disponível`
+    const c=A.maq,t=A.tot,mq=chip(A),bs=rotuloBase(t.base);
+    if(!t.regs){
+      D.push(['crit','SEM DADOS',mq,'Nenhum registro no período',
+        'A janela selecionada não tem marcação do contador para esta máquina. Nada foi estimado no lugar.']);
+      continue;
+    }
+    D.push([t.atingBase==null?'info':t.atingBase>=1?'ok':t.atingBase>=.9?'aten':'crit','META',mq,
+      t.atingBase==null?'Atingimento não calculável':t.atingBase>=1?'Meta do período atingida':'Meta do período não atingida',
+      `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planMetaBase)}</b> da meta proporcional — <b>${fmtPct(t.atingBase)}</b>. `
+      +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.tempoBase)} (${esc(bs)})`
       +(t.abono>0?`, já líquidos de ${nf1(t.abono)} min de abono.`:'.')]);
-    D.push([t.oee>=.85?'ok':t.oee>=.7?'aten':'crit','OEE',mq,
-      `OEE de ${nf1(t.oee*100)}% no período`,
-      `<b>${nf(t.pcs)}</b> peças produzidas contra <b>${nf(t.planCap)}</b> planejadas pela capacidade `
-      +`(${nf(c.cap)} peças/h × ${hDur(t.planej)}). A diferença de <b>${nf(t.planCap-t.pcs)}</b> peças é o total a recuperar.`]);
-    const pd=t.parauto/60*c.cap,pv=Math.max(0,c.cap-t.ritmoOper)*(t.oper/60);
-    D.push([pv>pd?'crit':'aten','PERDA',mq,
-      pv>pd?'A maior perda é de cadência':'A maior perda é de parada',
-      `Paradas somaram <b>${nf1(t.parauto)}</b> min, equivalentes a <b>${nf(pd)}</b> peças na velocidade nominal. `
-      +`Rodando abaixo da capacidade a linha deixou <b>${nf(pv)}</b> peças, porque o ritmo com a máquina em operação foi `
-      +`<b>${nf(t.ritmoOper)}</b> contra os ${nf(c.cap)} peças/h de capacidade.`]);
+    D.push([t.oeeBase==null?'info':t.oeeBase>=.85?'ok':t.oeeBase>=.7?'aten':'crit','OEE',mq,
+      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`,
+      `<b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planCapBase)}</b> planejadas pela capacidade `
+      +`(${nf(c.cap)} peças/h × ${hDur(t.tempoBase)}). `
+      +(t.planCapBase!=null?`A diferença de <b>${nf(t.planCapBase-t.pcs)}</b> peças é o total a recuperar.`:'')]);
+    if(t.semDados>0)
+      D.push([t.cobertura!=null&&t.cobertura<.85?'crit':'aten','SEM DADOS',mq,
+        `${hDur(t.semDados)} do período sem registro`,
+        `A cobertura ficou em <b>${fmtPct(t.cobertura)}</b>, em ${t.nLac} lacuna(s). `
+        +'Esse tempo não entrou como parada nem como produção — o OEE observado ignora a lacuna, o programado não.']);
+    if(t.parado>0&&t.ritmoOper!=null){
+      const pd=t.parado/60*c.cap,pv=Math.max(0,c.cap-t.ritmoOper)*(t.operacional/60);
+      D.push([pv>pd?'crit':'aten','PERDA',mq,
+        pv>pd?'A maior perda é de cadência':'A maior perda é de parada',
+        `Paradas somaram <b>${nf1(t.parado)}</b> min, equivalentes a <b>${nf(pd)}</b> peças na velocidade nominal. `
+        +`Rodando abaixo da capacidade a linha deixou <b>${nf(pv)}</b> peças, porque o ritmo em operação foi `
+        +`<b>${nf(t.ritmoOper)}</b> contra os ${nf(c.cap)} peças/h de capacidade.`]);
+    }
     if(A.paradas.length){
       const top=A.paradas.slice(0,3);
       D.push([top[0].min>=10?'crit':'aten','PARADAS',mq,
-        `${A.paradas.length} interrupções somando ${nf1(t.parauto)} min`,
-        'As maiores foram '+top.map(p=>{const a=new Date(p.ini),b=new Date(p.fim);
-          return `<b>${pad2(a.getDate())}/${pad2(a.getMonth()+1)} ${hhmm(a)}→${hhmm(b)}</b> (${nf1(p.min)} min)`}).join(', ')
+        `${A.paradas.length} interrupções somando ${nf1(t.parado)} min`,
+        'As maiores foram '+top.map(p=>`<b>${dtCurto(p.a)} → ${dtCurto(p.b)}</b> (${nf1(p.min)} min)`).join(', ')
         +'. Compare com o apontamento do MES antes de tratar como perda de máquina.']);
     }
-    if(A.tcP10){
-      const pico=3600/A.tcP10*pecas(c);
-      if(pico>c.cap*1.02) D.push(['aten','CAPACIDADE',mq,'Cadência de pico acima do cadastro',
-        `A melhor cadência sustentada foi <b>${nf(pico)}</b> peças/h, acima dos ${nf(c.cap)} cadastrados. `
-        +'Enquanto isso não for revisto, o OEE fica otimista.']);
-    }
-    if(A.frac) D.push(['crit','DADOS',mq,`${A.frac} registros com valor quebrado`,
-      'O contador deveria ser sempre inteiro. Verifique se o historian está interpolando em modo analógico em vez de degrau.']);
+    if(A.qual.classe==='ruim')
+      D.push(['crit','QUALIDADE',mq,'Qualidade dos dados classificada como ruim',
+        'Os indicadores acima existem, mas não sustentam decisão sem antes corrigir a coleta. Veja o painel de validação.']);
   }
   if(AS.length>1){
-    const o=AS.slice().sort((a,b)=>b.tot.oee-a.tot.oee),a=o[0],z=o[o.length-1];
-    D.push(['info','COMPARAÇÃO','',`${esc(a.maq.nome)} lidera em OEE, ${esc(z.maq.nome)} fica atrás`,
-      `<b>${nf1(a.tot.oee*100)}%</b> contra <b>${nf1(z.tot.oee*100)}%</b>, com ritmo em operação de `
-      +`<b>${nf(a.tot.ritmoOper)}</b> e <b>${nf(z.tot.ritmoOper)}</b> peças/h. `
-      +`Se rodam o mesmo produto, os ${nf(Math.abs(a.tot.ritmoOper-z.tot.ritmoOper))} peças/h de diferença são o alvo mais barato do período.`]);
+    const com=AS.filter(a=>a.tot.oeeBase!=null);
+    if(com.length>1){
+      const o=com.slice().sort((a,b)=>b.tot.oeeBase-a.tot.oeeBase),a=o[0],z=o[o.length-1];
+      D.push(['info','COMPARAÇÃO','',`${esc(a.maq.nome)} lidera em OEE, ${esc(z.maq.nome)} fica atrás`,
+        `<b>${fmtPct(a.tot.oeeBase)}</b> contra <b>${fmtPct(z.tot.oeeBase)}</b>, com ritmo em operação de `
+        +`<b>${fmtVal(a.tot.ritmoOper)}</b> e <b>${fmtVal(z.tot.ritmoOper)}</b> peças/h.`]);
+    }
   }
   return D;
 }
 
+/* --- montagem da tela ---------------------------------------------------- */
+function secao(titulo,lede){
+  const s=el('section');
+  s.innerHTML='<h2>'+titulo+'</h2>'+(lede?'<p class="lede">'+lede+'</p>':'');
+  return s;
+}
 function renderAnalise(){
   const {AS}=LAST,out=$('a_out');out.innerHTML='';
-  const s1=el('section');
-  s1.innerHTML='<h2>Resumo do período</h2><p class="lede">'+brDate(LAST.de)+' a '+brDate(LAST.ate)
-    +' · agrupado por '+LAST.gran+' · paradas acima de '+nf1(LAST.lim)+' min</p>';
+
+  const s1=secao('Resumo do período',
+    dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
+    +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
+    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min');
   for(const A of AS){
     const c=A.maq,h=el('div');
     h.innerHTML=`<h2 style="margin:16px 0 10px"><span class="swatch" style="background:${c.cor}"></span>${esc(c.nome)}`
       +`<span class="tag">${c.modo==='unidade'?'1 peça por incremento':nf(c.porInc)+' peças por '+esc(c.unid)}</span>`
-      +`<span class="tag">capacidade ${nf(c.cap)} peças/h</span></h2>`;
+      +`<span class="tag">capacidade ${nf(c.cap)} peças/h</span>`
+      +`<span class="tag">meta ${nf(c.meta)} peças/h</span>`
+      +`<span class="pill p-${A.qual.cor==='n'?'w':A.qual.cor}">dados: ${A.qual.rotulo}</span></h2>`;
     const g=el('div','kpis');g.innerHTML=cardsHTML(A);h.appendChild(g);s1.appendChild(h);
   }
   out.appendChild(s1);
 
-  if(opAtivo('turno')&&LAST.BT.length){
+  if(secaoAtiva('turno')){
     for(const A of AS){
-      const s=el('section');
-      s.innerHTML=`<h2><span class="swatch" style="background:${A.maq.cor}"></span>Fechamento por turno — ${esc(A.maq.nome)}</h2>`
-        +`<p class="lede">OEE fechado usa a duração cadastrada do turno. OEE parcial usa a janela até o último registro — serve para turno em andamento.`
-        +(LAST.excl?' A produção do turno excluído foi anexada ao turno seguinte.':'')+`</p>`;
-      const w=el('div','tblwrap');w.innerHTML=tabelaTurnos(A);s.appendChild(w);out.appendChild(s);
+      const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Fechamento por turno — ${esc(A.maq.nome)}`,
+        'Uma linha por ocorrência de turno dentro do período. As janelas são recortadas no filtro e nunca se sobrepõem, '
+        +'então nenhum registro entra em dois turnos.'
+        +(LAST.excl?' A janela do turno desconsiderado foi anexada ao turno seguinte.':''));
+      const w=el('div','tblwrap');w.innerHTML='<table>'+tabelaTurnos(A)+'</table>';s.appendChild(w);out.appendChild(s);
     }
   }
 
-  const s2=el('section');
-  s2.innerHTML='<h2>'+(opAtivo('acum')?'Produção acumulada':'Produção por '+LAST.gran)+'</h2>'
-    +'<p class="lede">Todas as máquinas na mesma linha do tempo.</p>';
+  const s2=secao(secaoAtiva('acum')?'Produção acumulada':'Produção por '+LAST.gran,
+    'Todas as máquinas na mesma linha do tempo.');
   const c2=el('div','card'),lg=el('div');
   lg.style.cssText='display:flex;flex-wrap:wrap;gap:15px;font-size:13px;color:var(--tx2);margin-bottom:13px';
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
-    +(opAtivo('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
-    +(opAtivo('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
+    +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
+    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 
-  if(opAtivo('cad')){
-    const s3=el('section');
-    s3.innerHTML='<h2>Cadência</h2><p class="lede">Cada traço é um registro do contador; a altura acompanha o tamanho do incremento. '
-      +'Blocos vermelhos são paradas, faixas cinza no topo são os turnos. Períodos sem dados são comprimidos.</p>';
+  if(secaoAtiva('cad')){
+    const s3=secao('Cadência',
+      'Cada traço é um registro do contador; a altura acompanha o tamanho do incremento. '
+      +'Blocos vermelhos são paradas, hachura cinza é ausência de dados, faixas no topo são os turnos.');
     const c3=el('div','card'),b3=el('div','cvbox');
     b3.innerHTML='<canvas id="tl" height="'+(52*AS.length+58)+'"></canvas>';
     c3.appendChild(b3);s3.appendChild(c3);out.appendChild(s3);
   }
-  if(opAtivo('tab')){
-    for(const A of AS){
-      const s=el('section');
-      s.innerHTML=`<h2><span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por ${LAST.gran} — ${esc(A.maq.nome)}</h2>`
-        +`<p class="lede">A coluna "vs anterior" compara as peças com o período imediatamente acima.</p>`;
-      const w=el('div','tblwrap');w.innerHTML=tabelaDetalhe(A);s.appendChild(w);out.appendChild(s);
-    }
-    const ac=el('div','acts');
-    ac.innerHTML='<button type="button" class="act" id="b_csv">Baixar CSV</button>';
-    out.appendChild(ac);
-    ac.querySelector('#b_csv').addEventListener('click',expCSV);
+
+  if(secaoAtiva('hora'))protegido('o detalhe por hora',()=>secaoHoras(out));
+  if(secaoAtiva('registros'))protegido('os registros individuais',()=>secaoRegistros(out));
+
+  if(secaoAtiva('qual')){
+    const s=secao('Qualidade dos dados',
+      'Mede a confiança nos números acima, não o desempenho da máquina.');
+    const w=el('div','tblwrap');w.innerHTML='<table>'+painelQualidade()+'</table>';s.appendChild(w);out.appendChild(s);
   }
-  if(opAtivo('dgn')){
-    const s=el('section');s.innerHTML='<h2>Diagnóstico</h2>';
+  if(secaoAtiva('valid')){
+    const s=secao('Painel de validação','O que precisa ser conferido antes de usar o número.');
+    const d=el('div');d.innerHTML=painelValidacao();s.appendChild(d);out.appendChild(s);
+  }
+  if(secaoAtiva('dgn')){
+    const s=secao('Diagnóstico','');
     const d=el('div');
     d.innerHTML=diagnosticos().map(x=>`<div class="dg ${x[0]}"><span class="lb">${x[1]}</span>`
       +`<div>${x[2]?`<div class="mq">${x[2]}</div>`:''}<div class="tt">${x[3]}</div><div class="bd">${x[4]}</div></div></div>`).join('');
     s.appendChild(d);out.appendChild(s);
   }
+  if(secaoAtiva('rastro')){
+    for(const A of AS){
+      const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Rastreabilidade — ${esc(A.maq.nome)}`,
+        'Cada indicador do período com a fórmula e os números que entraram nela.');
+      const w=el('div','tblwrap');w.innerHTML='<table>'+rastreabilidade(A)+'</table>';s.appendChild(w);out.appendChild(s);
+    }
+  }
+
+  const ac=el('div','acts');
+  ac.innerHTML='<button type="button" class="act" data-exp="periodo">CSV do período</button>'
+    +'<button type="button" class="act" data-exp="turno">CSV por turno</button>'
+    +'<button type="button" class="act" data-exp="hora">CSV por hora</button>'
+    +'<button type="button" class="act" data-exp="registros">CSV dos registros</button>'
+    +'<button type="button" class="act" data-exp="paradas">CSV de paradas e lacunas</button>';
+  ac.querySelectorAll('button[data-exp]').forEach(b=>b.addEventListener('click',()=>exportarCSV(b.dataset.exp)));
+  out.appendChild(ac);
+
   requestAnimationFrame(desenhar);
 }

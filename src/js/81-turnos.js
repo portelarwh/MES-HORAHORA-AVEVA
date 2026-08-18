@@ -40,9 +40,13 @@ $('t_padrao').addEventListener('click',async()=>{
     await put('turnos',{id:uid(),nome,inicio,fim});
   await recarregar();montarTurnos();toast('Três turnos criados — ajuste os horários se precisar')});
 
+/* Regra do turno desconsiderado: a ocorrência escolhida deixa de existir como
+   linha e sua janela é absorvida pelo turno cronologicamente seguinte, sem que
+   nenhum registro seja contado duas vezes. A escolha fica salva nas preferências. */
 function montarBorda(){
-  const s=$('a_borda'),atual=s.value;
-  s.innerHTML='<option value="todos">Manter em cada turno cadastrado</option>'
-    +TUR.map(t=>`<option value="sem:${t.id}">Não usar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
-  if(atual&&[...s.options].some(o=>o.value===atual))s.value=atual;
+  const s=$('a_borda'),atual=s.value||PREFS.borda||'todos';
+  s.innerHTML='<option value="todos">Manter cada turno cadastrado</option>'
+    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
+  s.value=[...s.options].some(o=>o.value===atual)?atual:'todos';
+  PREFS.borda=s.value;
 }
