@@ -86,19 +86,68 @@ que a máquina estava parada.
 Também são ausência de dados os trechos do período **antes do primeiro** e
 **depois do último** registro, e o período inteiro quando não há nenhum registro.
 
-### Produção não atribuída
+### A primeira marcação é a referência, não produção
 
-Um incremento só entra na produção do período quando é possível afirmar que
-aconteceu dentro dele. Fica de fora, e é reportado à parte, quando:
+A primeira marcação de um período **nunca conta como produção**: ela não tem
+delta próprio, é o ponto de partida da subtração. A contagem começa na **segunda
+marcação**, e daí em diante **todo delta conta**, sempre atribuído ao carimbo em
+que o historian o registrou. Nenhum horário intermediário é inventado para
+distribuir um incremento grande.
 
-- veio depois de um intervalo classificado como **sem dados** — não há como dizer
-  em que momento foi produzido;
-- o registro anterior está **fora do período** e o intervalo não é normal — parte
-  da produção pertence ao lado de fora da janela.
+Isso vale inclusive quando a marcação de referência está fora da janela
+analisada. Puxando o dia 17/08, a última marcação válida do dia 16/08 serve de
+referência, e o incremento registrado no dia 17 pertence ao dia 17 — que é o dia
+em que ele apareceu.
 
-Um intervalo normal (até 3 min) que cruza a borda do período é contado: a fatia
-que vaza é menor que o limiar e a convenção é registrar o incremento no instante
-em que ele aparece.
+**Exemplo verificável** (é o caso que originou esta regra):
+
+```
+16/08 14:40:07,500   1.006.142      referência, sem incremento
+17/08 05:12:11,692   1.006.143      Δ 1     <- 14h32 de lacuna antes dele
+17/08 05:21:14,076   1.006.150      Δ 7
+17/08 05:21:42,955   1.006.151      Δ 1
+17/08 05:37:30,254   1.006.164      Δ 13
+17/08 05:38:10,728   1.006.165      Δ 1
+17/08 05:43:40,278   1.006.167      Δ 2
+
+1.006.167 − 1.006.142 = 25 caixas
+soma dos deltas       = 25 caixas
+```
+
+Nenhum delta some. O mesmo vale no outro extremo: o último delta dentro da
+janela é sempre contado, e o delta seguinte pertence à janela em que o registro
+apareceu. Analisar 16/08 e 17/08 separadamente dá a mesma soma que analisar os
+dois juntos — nada é duplicado nem perdido.
+
+### Incrementos com data incerta
+
+Dois casos têm a **quantidade** certa e o **instante** incerto:
+
+| Marca | Quando |
+| --- | --- |
+| **Após lacuna** | o intervalo anterior foi classificado como ausência de dados |
+| **Borda** | o registro anterior está fora da janela analisada |
+
+No exemplo acima, a caixa registrada às 05:12 é uma dessas: ela foi produzida em
+algum ponto das 14h32 de silêncio, e o contador só a mostrou às 05:12. Ela é
+contada — a caixa existe —, e fica marcada no painel de qualidade, na coluna
+**Data incerta** e na lista de registros individuais.
+
+### O seletor de contagem
+
+O comportamento acima é o padrão. O seletor **“Contagem dos incrementos”**
+oferece a alternativa:
+
+| Modo | Efeito | Exemplo acima |
+| --- | --- | --- |
+| **Todo incremento conta, a partir da segunda marcação** (padrão) | tudo entra na produção, com os casos incertos marcados | **25 caixas** |
+| **Não contar incrementos vindos depois de uma lacuna** | os casos incertos ficam fora e viram *produção não atribuída* | 24 caixas, 1 reportada |
+
+O segundo modo serve para quem prefere não somar produção que não consegue
+localizar no tempo — uma análise de cadência hora a hora, por exemplo, em que
+uma caixa lançada na hora errada distorce mais do que a caixa faltante. Ele era
+o comportamento da versão 4.1.0 e passou a ser opcional porque perdia produção:
+a caixa não aparecia em janela nenhuma.
 
 ---
 

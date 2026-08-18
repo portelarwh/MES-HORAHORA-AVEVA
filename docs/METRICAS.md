@@ -28,6 +28,15 @@ Todo indicador que divide por tempo declara **contra o que** foi medido:
 | Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |
 | Até o último registro | última marcação − início do período | como está indo até agora |
 
+## A primeira marcação é referência
+
+Ela não tem delta próprio. A contagem começa na segunda marcação e, daí em
+diante, todo delta conta no carimbo em que foi registrado — a soma dos deltas
+fecha com a diferença entre a primeira e a última leitura. Incrementos vindos
+depois de uma lacuna, ou do registro anterior à janela, são contados e marcados
+como **data incerta**. O seletor *Contagem dos incrementos* permite deixá-los de
+fora, quando a localização no tempo importa mais que o total.
+
 ## Turno desconsiderado
 
 O turno não produtivo (limpeza) entrega a **produção** ao turno seguinte, mas não
