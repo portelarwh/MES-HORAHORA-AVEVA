@@ -3,6 +3,40 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [4.1.0] — 2026-08-18
+
+Ajuste de duas regras de negócio a partir do comportamento real da linha.
+
+### Adicionado
+- Base de cálculo **“Da primeira à última marcação”**, agora o padrão: o
+  denominador de meta e OEE vai do primeiro ao último registro do contador, e
+  não do horário do filtro. A linha começa a produzir quando a primeira caixa é
+  contada.
+- Cartão **Contagem do contador**, com a primeira e a última leitura do período
+  ao lado das caixas contadas, para conferência contra o painel da máquina.
+- Coluna **Adiantadas** no fechamento por turno e status **Produção antecipada**
+  para caixas cujo turno começa fora da janela analisada.
+- Coluna de OEE entre marcações no fechamento, na rastreabilidade, no relatório
+  A4, no texto de e-mail e nos CSV.
+- Validações de contagem: período que começa no início da contagem e produção
+  adiantada absorvida.
+
+### Alterado
+- **Regra do turno desconsiderado.** Antes, o turno anexado entregava a janela
+  inteira ao turno seguinte, o que jogava as horas do turno de limpeza no
+  denominador e afundava o OEE de quem apenas herdou o trabalho. Agora cada
+  linha do fechamento tem duas janelas: a de **tempo** é o horário cadastrado do
+  turno e serve de denominador; a de **produção** é estendida sobre o turno
+  anexado e serve de numerador. No exemplo de referência, o mesmo turno passa de
+  54,0% para 108,0% de OEE.
+
+  Consequência: com um turno desconsiderado, a soma das horas do fechamento fica
+  menor que o período, exatamente pelas horas retiradas. A soma das caixas
+  continua igual — nada é duplicado nem perdido.
+- O campo “Contagem do lote inicia em” virou **“Contador indica a próxima —
+  contagem inicia em”**, com prévia explicando que a leitura 1 significa nenhuma
+  caixa concluída.
+
 ## [4.0.0] — 2026-08-18
 
 Revisão de correção e evolução. O IndexedDB continua na versão 1: bases e

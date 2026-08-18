@@ -7,7 +7,7 @@ refeitos na mão, estão em **[calculos.md](calculos.md)**.
 
 | Indicador | Fórmula | Observação |
 | --- | --- | --- |
-| Produção | incrementos × peças por incremento | incremento vem do cadastro da máquina |
+| Produção | incrementos × peças por incremento | o contador indica a próxima unidade: leitura − início da contagem |
 | Meta proporcional | meta (peças/h) × base ÷ 60 | acompanha a base escolhida |
 | Atingimento | peças ÷ meta proporcional | “—” quando a meta não está cadastrada |
 | OEE | peças ÷ (capacidade × base ÷ 60) | quatro leituras, uma por base |
@@ -22,10 +22,18 @@ Todo indicador que divide por tempo declara **contra o que** foi medido:
 
 | Base | Denominador | Responde a |
 | --- | --- | --- |
+| Da primeira à última marcação | última − primeira marcação − abono | quanto entregou enquanto esteve contando (**padrão**) |
 | Período selecionado | período − abono | quanto entregou do que o relógio permitia |
 | Janela com dados | tempo com dados − abono | quanto entregou enquanto era observada |
 | Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |
 | Até o último registro | última marcação − início do período | como está indo até agora |
+
+## Turno desconsiderado
+
+O turno não produtivo (limpeza) entrega a **produção** ao turno seguinte, mas não
+as **horas**. Cada linha do fechamento passa a ter duas janelas: a de tempo é o
+horário cadastrado do turno e vale como denominador; a de produção é estendida
+sobre o turno anexado e vale como numerador.
 
 ## Parada não é ausência de dados
 
