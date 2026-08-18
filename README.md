@@ -31,7 +31,8 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade e meta em peças por hora. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
 | Meta proporcional | A meta acompanha a base escolhida. Por padrão a base vai da primeira à última marcação do contador — a linha começa a produzir quando a primeira caixa é contada, não quando o relógio do filtro vira. |
-| OEE em cinco leituras | Entre marcações (padrão), programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
+| OEE em seis leituras | Entre marcações (padrão), turno cadastrado, programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
+| Relatório dobrável | Toda seção da análise recolhe e expande pelo próprio título, com “Expandir tudo” e “Recolher tudo”. O estado fica salvo. |
 | Contador de próxima unidade | A leitura do historian indica a **próxima** caixa: leitura 21 com contagem iniciando em 1 são 20 caixas prontas. O cartão “Contagem do contador” mostra as leituras para conferência contra o painel da máquina. |
 | Contagem sem perda | A primeira marcação é só a referência; da segunda em diante todo delta conta, no carimbo em que foi registrado. A soma dos deltas fecha com a diferença das leituras. Incrementos vindos depois de uma lacuna são contados e marcados como *data incerta*. |
 | Turno de limpeza | O turno desconsiderado entrega sua produção ao turno seguinte sem entregar as horas: quem recebe as caixas adiantadas conta a produção e continua medido pelo próprio horário cadastrado. |
@@ -175,10 +176,15 @@ tempo sem dados     = período − tempo com dados          (nunca é parada)
 tempo parado        = intervalos entre os dois limiares
 ```
 
-E as cinco bases: `marcações` (primeira → última marcação − abono, **padrão**),
-`programado` (período − abono), `observado` (com dados − abono), `operacional`
-(observado − paradas) e `parcial` (início do período até a última marcação −
-abono).
+E as seis bases: `marcações` (primeira → última marcação − abono, **padrão**),
+`turno cadastrado` (horas de turno no período − abono), `programado` (período −
+abono), `observado` (com dados − abono), `operacional` (observado − paradas) e
+`parcial` (início do período até a última marcação − abono).
+
+Escolhendo **Tempo cadastrado do turno**, o denominador é só o tempo previsto em
+escala, já sem o turno desconsiderado. O numerador continua sendo toda a
+produção do período, então as caixas feitas fora de turno cadastrado entram como
+**bônus** — o cartão declara quantas peças são.
 
 ### Produção, meta e OEE
 
@@ -193,6 +199,7 @@ OEE                = peças ÷ planejado
 | Leitura | Base do denominador |
 | --- | --- |
 | OEE entre marcações | primeira → última marcação − abono |
+| OEE pelo turno cadastrado | horas de turno cadastrado no período − abono |
 | OEE programado | período selecionado − abono |
 | OEE observado | tempo com dados − abono |
 | OEE operacional | observado − paradas detectadas |

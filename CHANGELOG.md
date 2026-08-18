@@ -3,6 +3,27 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [4.3.0] — 2026-08-18
+
+### Adicionado
+- **Seções recolhíveis.** Toda seção da análise expande e recolhe pelo próprio
+  título, por clique ou pelo teclado, com botões “Expandir tudo” e “Recolher
+  tudo”. O estado fica salvo por seção e sobrevive ao recarregamento. Na
+  impressão o relatório sai completo, independentemente do que estiver recolhido.
+- Base de cálculo **“Tempo cadastrado do turno”**: o denominador passa a ser só
+  as horas de turno cadastradas que caem no período, já sem o turno
+  desconsiderado. O numerador continua sendo toda a produção, então as caixas
+  feitas fora de turno entram como **bônus** — o cartão, a rastreabilidade, o
+  relatório e o CSV declaram quantas peças são.
+- Cartão **OEE pelo turno cadastrado** e coluna `OEE_turno_%` nos CSV.
+- Cartão **Tempo de ciclo médio**: segundos por caixa sobre o tempo rodando, com
+  mediana, melhor cadência sustentada e comparação com o ciclo nominal do
+  cadastro, em desvio percentual.
+
+### Removido
+- Cartão **Contagem do contador**. A leitura inicial e final continua disponível
+  na seção de rastreabilidade, onde serve para auditoria.
+
 ## [4.2.0] — 2026-08-18
 
 ### Corrigido

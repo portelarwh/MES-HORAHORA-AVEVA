@@ -158,6 +158,20 @@ vermelho para parada detectada, hachura cinza para ausência de dados. O eixo é
 comprimido nos trechos com cobertura, para que dias vazios não estiquem o
 gráfico.
 
+## Seções recolhíveis
+
+Cada seção da análise recebe uma chave (`data-sec`) e um estado (`data-aberto`).
+O recolhimento é feito por uma regra de CSS que esconde os irmãos do `<h2>`, em
+vez de envolver cada bloco numa `div` extra — o HTML das seções continua como
+estava e nenhum call site precisou mudar de estrutura.
+
+O estado fica em `PREFS.recolhidas`, por chave. Ao expandir uma seção que contém
+canvas, `desenhar()` é chamado no quadro seguinte: um canvas medido enquanto
+escondido devolve largura zero e sai em branco.
+
+Na impressão, a regra de recolhimento é revertida — o relatório em papel sai
+completo, independentemente do que estiver recolhido na tela.
+
 ## Armadilha de HTML que já custou caro
 
 `elemento.innerHTML = '<thead>...'` só funciona se o elemento for uma `<table>`.

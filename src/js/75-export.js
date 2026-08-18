@@ -29,21 +29,22 @@ const cabecalhoJanela=()=>[
 ];
 
 const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
-  'Data_incerta_inc','Borda_inc','Nao_atribuido',
+  'Fora_de_turno_inc','Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
   'Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
-  'OEE_marcacoes_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
+  'OEE_marcacoes_%','OEE_turno_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
-  'Marcacoes_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
+  'Marcacoes_min','Turno_cadastrado_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
   'Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
 const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
-  nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
+  nf0(l.incForaTurno),nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
-  csvPct(l.oee.marcacoes),csvPct(l.oee.programado),csvPct(l.oee.observado),
+  csvPct(l.oee.marcacoes),csvPct(l.oee.turno),csvPct(l.oee.programado),csvPct(l.oee.observado),
   csvPct(l.oee.operacional),csvPct(l.oee.parcial),
   csvNum(l.dur,1),csvNum(l.comDados,1),csvNum(l.semDados,1),csvNum(l.parado,1),csvNum(l.abono,1),
-  csvNum(l.marcacoes,1),csvNum(l.programado,1),csvNum(l.observado,1),csvNum(l.operacional,1),csvNum(l.parcial,1),
+  csvNum(l.marcacoes,1),csvNum(l.turno,1),csvNum(l.programado,1),csvNum(l.observado,1),
+  csvNum(l.operacional,1),csvNum(l.parcial,1),
   csvPct(l.cobertura),csvPct(l.disp),csvNum(l.ritmo,0),csvNum(l.interv,1)];
 const nf0=v=>v==null||!Number.isFinite(v)?'':String(Math.round(v));
 

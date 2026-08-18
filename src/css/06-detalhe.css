@@ -35,3 +35,15 @@ table.sub tbody tr:last-child td{border-bottom:0}
   .tblwrap td:first-child{min-width:120px}
   .bar-tools .fld{min-width:130px}
 }
+
+/* Seções recolhíveis: esconder os irmãos do título evita envolver cada bloco
+   numa div extra e mantém o HTML das seções como estava. */
+h2.sech{cursor:pointer;user-select:none}
+h2.sech:hover{color:var(--accent)}
+h2.sech:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+h2.sech .cx{display:inline-block;width:14px;color:var(--tx3);font-size:12px;flex:0 0 14px}
+h2.sech:hover .cx{color:var(--accent)}
+section[data-aberto="false"]>:not(h2){display:none}
+section[data-aberto="false"]{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+section[data-aberto="false"] h2{margin-bottom:0}
+@media print{section[data-aberto="false"]>:not(h2){display:revert}h2.sech .cx{display:none}}

@@ -105,12 +105,16 @@ async function rodarAnalise(opts){
   $('a_vazio').style.display='none';
 
   const BT=turnosNoIntervalo(TUR,J.ini,J.fim,excl);
+  /* Janelas de tempo dos turnos cadastrados, já sem o turno desconsiderado.
+     É o denominador da base "Tempo cadastrado do turno". */
+  const turnoSegs=unirSegs(BT.filter(t=>t.b>t.a).map(t=>({a:t.a,b:t.b})));
   const B=bucketsDe(gran,J.ini,J.fim,TUR,excl);
   const BH=bucketsDe('hora',J.ini,J.fim);
   const agora=Date.now();
   const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length};
 
   for(const A of AS){
+    A.turnoSegs=turnoSegs;
     A.tot=metricas(A,J.ini,J.fim);
     A.linhas=B.map(bk=>({bk,...medir(A,bk)}));
     A.horas=BH.map(bk=>({bk,...medir(A,bk)}));

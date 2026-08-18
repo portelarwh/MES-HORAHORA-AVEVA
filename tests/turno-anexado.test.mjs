@@ -125,3 +125,71 @@ test('sem turno desconsiderado, produção e tempo usam a mesma janela', () => {
   }
   assert.equal(B.reduce((s, b) => s + (b.b - b.a), 0) / 60000, 1440);
 });
+
+/* --- base "Tempo cadastrado do turno" ----------------------------------- */
+const segsDe = B => A.unirSegs(B.filter(t => t.b > t.a).map(t => ({ a: t.a, b: t.b })));
+
+test('base do turno cadastrado usa só as horas de turno, não o período inteiro', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = segsDe(A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, null));
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  perto(t.dur, 1440);
+  perto(t.turno, 1440, 1e-6);                  // três turnos cobrem o dia inteiro
+  perto(t.oee.turno, t.oee.programado, 1e-9);
+});
+
+test('com o 3º turno desconsiderado, as horas dele saem do denominador', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = segsDe(A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3'));
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  perto(t.turno, 1440 - 440);                  // 24h menos as 7h20 do turno de limpeza
+  assert.ok(t.oee.turno > t.oee.programado,
+    'medir só pelas horas de turno produtivo dá um OEE maior que medir pelo dia inteiro');
+  perto(t.oee.turno, t.pcs / (MAQ_LOTE.cap * 1000 / 60));
+});
+
+test('as caixas adiantadas entram como bônus: a produção fica fora do denominador do turno', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  const B = A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3');
+  a.turnoSegs = segsDe(B);
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  /* As 20 caixas das 05:00–05:40 foram feitas fora de qualquer turno cadastrado
+     (o 3º foi desconsiderado), então contam no numerador sem custar denominador. */
+  const semAdiantadas = (t.pcs - 20 * A.pecas(MAQ_LOTE)) / (MAQ_LOTE.cap * t.turno / 60);
+  assert.ok(t.oee.turno > semAdiantadas, 'o bônus das adiantadas eleva o indicador');
+});
+
+test('sem turno cadastrado, a base do turno é não calculável e não vira zero', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = [];
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  assert.equal(t.turno, null);
+  assert.equal(t.oee.turno, null);
+  assert.equal(A.fmtPct(t.oee.turno), A.NAO_CALC);
+});
+
+test('as bases entregam números diferentes entre si, como esperado', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = segsDe(A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3'));
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  const vistos = new Set([t.oee.marcacoes, t.oee.turno, t.oee.programado].map(v => Math.round(v * 1e6)));
+  assert.equal(vistos.size, 3, 'marcações, turno cadastrado e período selecionado são cálculos distintos');
+  assert.ok(t.tempos.marcacoes < t.tempos.turno && t.tempos.turno < t.tempos.programado);
+});
+
+test('o bônus é a produção registrada fora de qualquer turno cadastrado', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = segsDe(A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3'));
+  const t = A.metricas(a, DIA_INI, DIA_FIM);
+  assert.equal(t.incForaTurno, 20, 'as 20 caixas das 05:00–05:40 caem no horário do turno desconsiderado');
+  assert.equal(t.pcsForaTurno, 20 * A.pecas(MAQ_LOTE));
+  /* Sem elas o mesmo denominador daria um OEE menor: é essa diferença o bônus. */
+  perto(t.oee.turno - (t.pcs - t.pcsForaTurno) / (MAQ_LOTE.cap * t.turno / 60),
+        t.pcsForaTurno / (MAQ_LOTE.cap * t.turno / 60), 1e-9);
+});
+
+test('com todos os turnos ativos não há bônus: tudo cai dentro de turno', () => {
+  const a = an(MAQ_LOTE, linhaComAdiantadas());
+  a.turnoSegs = segsDe(A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, null));
+  assert.equal(A.metricas(a, DIA_INI, DIA_FIM).incForaTurno, 0);
+});
