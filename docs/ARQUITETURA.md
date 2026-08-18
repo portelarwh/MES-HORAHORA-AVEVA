@@ -72,15 +72,25 @@ página.
 Quatro coleções no IndexedDB, banco `monitor-hh`, **versão 1**:
 
 ```js
-maquinas  { id, nome, etapa, modo, porInc, unid, cap, meta, offset, cor, obs }
-turnos    { id, nome, inicio, fim }
-ajustes   { id, maquinaId, data, tipo, inicio, minutos, qtd, un, obs }
-dias      { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, pts: [[ms, valor], ...] }
+maquinas    { id, nome, etapa, modo, porInc, unid, cap, meta, offset, catalogoId, cor, obs }
+turnos      { id, nome, inicio, fim }
+ajustes     { id, maquinaId, data, tipo, inicio, minutos, qtd, un, obs }
+catalogos   { id, numero, tipo, metaHora, obs }
+dias        { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, pts: [[ms, valor], ...] }
+programacao { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, horas: { "6": catalogoId, ... } }
 ```
 
-A versão do banco **não mudou** nesta revisão: nenhum store novo, nenhum keyPath
-alterado. Base e backup criados por versões anteriores continuam sendo lidos sem
-conversão.
+**Migração 1 → 2.** Puramente aditiva: cria `catalogos` e `programacao`, e não
+toca em nenhum store existente, keyPath ou registro. Uma base da versão 1 abre
+na 2 com todos os dados intactos e os dois stores novos vazios — a meta cai no
+fallback do cadastro da máquina até que algum catálogo seja criado. A criação dos
+stores é idempotente, então vale igual para banco novo e para base migrada.
+Backups anteriores, sem os campos novos, são restaurados normalmente.
+
+`programacao` espelha o formato de `dias` de propósito: uma linha por máquina e
+dia, com o mapa de hora do dia para catálogo. Ler um intervalo continua sendo um
+range contíguo da chave primária, e a gravação de uma hora só reescreve um
+registro pequeno.
 
 `dias` guarda um dia inteiro por registro em vez de um registro por ponto. Um
 turno rende algumas centenas de pontos; gravá-los individualmente multiplicaria o
