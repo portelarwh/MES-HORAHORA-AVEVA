@@ -179,7 +179,9 @@ function textoEmail(){
     if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
     if(x.incForaTurno>0)b+=`- Bônus: ${nf(x.pcsForaTurno)} peças produzidas fora de turno cadastrado, no numerador sem custar denominador\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
-    b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
+    if((x.catalogos||[]).length)
+      b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;
+    b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças a ${fmtVal(x.metaEfetiva)} peças/h — atingimento ${fmtPct(x.atingBase)}\n`;
     b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
     b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;
     b+=`- Intervalo médio entre ${c.unid}s: ${fmtSeg(x.interv)}\n`;

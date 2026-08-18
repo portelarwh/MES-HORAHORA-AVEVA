@@ -37,6 +37,7 @@
   <button type="button" role="tab" data-v="importar" aria-selected="false">Importar</button>
   <button type="button" role="tab" data-v="maquinas" aria-selected="false">Máquinas <span class="cnt" id="c_maq">0</span></button>
   <button type="button" role="tab" data-v="turnos" aria-selected="false">Turnos <span class="cnt" id="c_tur">0</span></button>
+  <button type="button" role="tab" data-v="catalogos" aria-selected="false">Catálogos <span class="cnt" id="c_cat">0</span></button>
   <button type="button" role="tab" data-v="dia" aria-selected="false">Lançamentos <span class="cnt" id="c_aju">0</span></button>
   <button type="button" role="tab" data-v="dados" aria-selected="false">Base de dados</button>
 </nav>
@@ -80,6 +81,16 @@
           <select id="a_contagem"></select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
+
+      <div class="sublbl">Catálogo do período</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <div class="fld" style="min-width:330px"><label for="a_cat">Catálogo</label><select id="a_cat"></select></div>
+        <button type="button" class="act" id="a_cat_todas">Aplicar a todas as horas</button>
+        <button type="button" class="act dgr" id="a_cat_limpar">Limpar programação</button>
+      </div>
+      <p class="note" style="margin-top:0;margin-bottom:16px">Aplica o catálogo escolhido a todas as horas do período,
+        nas máquinas selecionadas. Para uma troca de catálogo no meio do processo, edite a hora diretamente na coluna
+        <b>Catálogo</b> da tabela <b>Detalhe por hora</b>.</p>
 
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
@@ -159,6 +170,17 @@
   </section>
 </div>
 
+<div class="view" id="v_catalogos">
+  <section>
+    <h2>Catálogos</h2>
+    <p class="lede">Cada catálogo é um produto com a sua própria meta em peças por hora. A meta de uma hora é a do
+      catálogo programado para ela; sem programação, vale o catálogo padrão da máquina; sem catálogo padrão, a meta
+      cadastrada na própria máquina.</p>
+    <div id="k_lista"></div>
+    <div class="acts"><button type="button" class="act pri" id="k_novo">Cadastrar catálogo</button></div>
+  </section>
+</div>
+
 <div class="view" id="v_dia">
   <section>
     <h2>Lançamentos manuais</h2>
@@ -234,6 +256,7 @@
 <script src="js/81-turnos.js"></script>
 <script src="js/82-lancamentos.js"></script>
 <script src="js/83-dados.js"></script>
+<script src="js/84-catalogos.js"></script>
 <script src="js/90-montagem.js"></script>
 <script src="js/99-boot.js"></script>
 </body>

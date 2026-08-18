@@ -4,7 +4,7 @@
 function formMaquina(m){
   const novo=!m;
   m=m||{id:uid(),nome:'',etapa:'',modo:'lote',porInc:1000,unid:'caixa',meta:90000,cap:115000,
-    offset:1,cor:PAL[MAQ.length%PAL.length],obs:''};
+    offset:1,catalogoId:'',cor:PAL[MAQ.length%PAL.length],obs:''};
   $('dlg_t').textContent=novo?'Cadastrar máquina':'Editar máquina';
   $('dlg_p').textContent='Capacidade e meta são sempre em peças por hora.';
   $('dlg_b').innerHTML=`<div class="grid">
@@ -16,7 +16,8 @@ function formMaquina(m){
     <div class="fld"><label>Peças por incremento</label><input type="number" id="f_por" value="${m.porInc}" min="1"></div>
     <div class="fld"><label>Nome do incremento</label><input id="f_unid" value="${esc(m.unid)}" placeholder="caixa, rack, palete"></div>
     <div class="fld"><label>Capacidade (peças/h)</label><input type="number" id="f_cap" value="${m.cap}" min="1" step="100"></div>
-    <div class="fld"><label>Meta (peças/h)</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
+    <div class="fld"><label for="f_meta">Meta (peças/h) — usada sem catálogo</label><input type="number" id="f_meta" value="${m.meta}" min="1" step="100"></div>
+    <div class="fld"><label for="f_cat">Catálogo padrão</label><select id="f_cat">${optsCatalogo(m.catalogoId)}</select></div>
     <div class="fld"><label>Contador indica a próxima — contagem inicia em</label><input type="number" id="f_off" value="${m.offset}" min="0"></div>
     <div class="fld"><label>Cor no gráfico</label><select id="f_cor">${PAL.map(c=>`<option value="${c}" ${c===m.cor?'selected':''}>${c}</option>`).join('')}</select></div>
   </div>
@@ -52,6 +53,7 @@ function formMaquina(m){
     await put('maquinas',{id:m.id,nome,etapa:$('f_etapa').value.trim(),modo,
       porInc:modo==='unidade'?1:(+$('f_por').value||1),unid:$('f_unid').value.trim()||'caixa',
       meta:+$('f_meta').value||1,cap:+$('f_cap').value||1,offset:+$('f_off').value||0,
+      catalogoId:$('f_cat').value||'',
       cor:$('f_cor').value,obs:$('f_obs').value.trim()});
     $('dlg').close();await recarregar();
     montarMaquinas();montarAnalise();montarDia();montarDados();toast('Máquina salva');});
@@ -67,7 +69,8 @@ function montarMaquinas(){
       <div><div class="nm">${esc(m.nome)}${m.etapa?' <span class="tag">'+esc(m.etapa)+'</span>':''}</div>
       <div class="ds">${m.modo==='unidade'?'1 peça por incremento':nf(m.porInc)+' peças por '+esc(m.unid)}
         · capacidade ${nf(m.cap)} peças/h = ${nf1(m.cap/pc)} ${m.modo==='unidade'?'inc':esc(m.unid)+'s'}/h
-        · meta ${nf(m.meta)} peças/h · lote inicia em ${m.offset}</div>
+        · meta ${nf(m.meta)} peças/h · contagem inicia em ${m.offset}
+        · catálogo padrão ${m.catalogoId&&catPorId(m.catalogoId)?rotuloCat(catPorId(m.catalogoId)):'nenhum'}</div>
       ${m.obs?'<div class="ds" style="margin-top:3px;font-style:italic">'+esc(m.obs)+'</div>':''}</div><span class="sp"></span>`;
     const e=el('button','act');e.type='button';e.textContent='Editar';
     e.addEventListener('click',()=>formMaquina(m));

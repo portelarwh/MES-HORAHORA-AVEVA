@@ -73,6 +73,44 @@ function serieDePontos(dias){
   return{pts,duplicados,foraDeOrdem,frac};
 }
 
+/* --- meta por hora, vinda do catálogo -----------------------------------
+   Cada hora de relógio pode rodar um catálogo diferente, com meta própria. A
+   meta de um recorte é a média das metas horárias PONDERADA pelos minutos que
+   o recorte ocupa em cada hora — assim um turno que troca de catálogo no meio
+   fica com a meta certa, e uma hora inteira fica com a meta do seu catálogo. */
+const chaveHora=ms=>{const d=new Date(ms);return iso(d)+'T'+pad2(d.getHours())};
+
+function horasDaJanela(ini,fim,metaHoras,padrao){
+  const out=[];
+  const d=new Date(ini);d.setMinutes(0,0,0);
+  for(let t=d.getTime();t<fim;t+=3600000){
+    const info=(metaHoras&&metaHoras.get(chaveHora(t)))||padrao||null;
+    out.push({a:t,b:t+3600000,
+      metaHora:info&&Number.isFinite(info.metaHora)&&info.metaHora>0?info.metaHora:null,
+      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null});
+  }
+  return out;
+}
+/* Média ponderada da meta e a lista de catálogos que o recorte atravessou. */
+function metaDoRecorte(horas,a,b){
+  let min=0,peso=0,semMeta=0;const usados=new Map();
+  for(const h of horas){
+    if(h.b<=a)continue;
+    if(h.a>=b)break;
+    const m=ovl(h.a,h.b,a,b);
+    if(m<=0)continue;
+    min+=m;
+    if(h.metaHora==null){semMeta+=m;continue}
+    peso+=m*h.metaHora;
+    const k=h.catalogoId||'_';
+    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,metaHora:h.metaHora,min:0};
+    u.min+=m;usados.set(k,u);
+  }
+  const comMeta=min-semMeta;
+  return{metaEfetiva:comMeta>0?peso/comMeta:null,minutos:min,minutosSemMeta:semMeta,
+    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min)};
+}
+
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
 /* opts: {ini, fim, limParadaMin, limSemDadosMin, ajustes, base} */
 function analisarMaquina(maq,dias,opts){
@@ -133,8 +171,14 @@ function analisarMaquina(maq,dias,opts){
   const tcs=eventos.filter(e=>e.contabiliza&&e.delta>0).map(e=>e.gapS/e.delta).sort((a,b)=>a-b);
   const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
 
+  /* Sem catálogo programado nem catálogo padrão, a meta é a cadastrada na
+     própria máquina: uma base sem nenhum catálogo continua calculando igual. */
+  const metaPadrao=opts.metaPadrao||{
+    metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
+    catalogoId:null,numero:null,tipo:'meta da máquina'};
   return{maq,pc,ini,fim,base:opts.base||'marcacoes',
-    turnoSegs:opts.turnoSegs||[],
+    turnoSegs:opts.turnoSegs||[],metaPadrao,
+    horasMeta:horasDaJanela(ini,fim,opts.metaHoras,metaPadrao),
     ajustes:opts.ajustes||[],pts,dentro,eventos,
     cobertura:cob,lacunas:lac.sort((a,b)=>b.min-a.min),
     paradas:par.sort((a,b)=>b.min-a.min),
@@ -257,11 +301,13 @@ function metricas(A,a,b,prod){
 
   const pcs=inc*pc;
   const bom=Math.max(0,pcs-L.refugo-L.retrab);
+  const M=metaDoRecorte(A.horasMeta||[],a,b);
+  const metaEfetiva=M.metaEfetiva;
   const planCap={},planMeta={},oee={},ating={};
   for(const k of Object.keys(tempos)){
     const t=tempos[k];
     planCap[k]=t==null?null:c.cap*(t/60);
-    planMeta[k]=t==null?null:c.meta*(t/60);
+    planMeta[k]=(t==null||metaEfetiva==null)?null:metaEfetiva*(t/60);
     oee[k]=razao(pcs,planCap[k]);
     ating[k]=razao(pcs,planMeta[k]);
   }
@@ -273,6 +319,7 @@ function metricas(A,a,b,prod){
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
+    metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -368,4 +415,4 @@ function bucketsDe(gran,ini,fim,turnos,excluirId){
 if(typeof module!=='undefined'&&module.exports)module.exports={
   pecas,ovl,unirSegs,ovlSegs,dentroSegs,recortarSegs,inverterSegs,classificar,
   NORMAL,PARADA,SEMDADOS,serieDePontos,analisarMaquina,lancDe,metricas,
-  turnosNoIntervalo,bucketsDe};
+  turnosNoIntervalo,bucketsDe,chaveHora,horasDaJanela,metaDoRecorte};

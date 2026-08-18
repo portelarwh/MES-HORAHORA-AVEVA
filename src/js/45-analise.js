@@ -97,8 +97,10 @@ async function rodarAnalise(opts){
     let dias=[];
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
+    const MM=await metaHorasDaMaquina(m,deK,ateK);
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
-      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem}));
+      limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
+      metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));
   }
   if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}

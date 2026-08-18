@@ -15,9 +15,16 @@ function desenhar(){if(!LAST)return;if($('ch'))protegido('o gráfico',()=>grafic
   if($('tl'))protegido('a cadência',cadencia);}
 
 function grafico(cv,forcaW,forcaH){
-  const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706'}:TH();
+  const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706',
+    ok:'#1B8A5A',warn:'#B27300',bad:'#C33C4E'}:TH();
   const {AS,B}=LAST,{x,w,h}=setup(cv,forcaH||340,forcaW);
   const acum=secaoAtiva('acum'),rot=secaoAtiva('rot');
+  /* Cor por atingimento da meta daquele recorte: verde bateu, âmbar chegou
+     perto, vermelho ficou longe, neutro não calculável. Com mais de uma
+     máquina a identidade fica no contorno, para não perder quem é quem. */
+  const porMeta=secaoAtiva('corMeta');
+  const COR={g:T.ok||'#1B8A5A',w:T.warn||'#B27300',r:T.bad||'#C33C4E',n:T.tx3};
+  const corDe=(A,i)=>porMeta?COR[cl(A.linhas[i].atingBase)]:A.maq.cor;
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
@@ -42,8 +49,9 @@ function grafico(cv,forcaW,forcaH){
     const gap=Math.min(4,bw*.06),tot=bw*.66,bwid=Math.max(2,(tot-gap*(AS.length-1))/AS.length);
     AS.forEach((A,k)=>series[k].forEach((v,j)=>{
       const cx=pad.l+bw*j+bw/2-tot/2+k*(bwid+gap),y=Y(v),hh=Math.max(1.5,pad.t+ih-y);
-      x.fillStyle=A.maq.cor;x.beginPath();
+      x.fillStyle=corDe(A,idx[j]);x.beginPath();
       if(x.roundRect)x.roundRect(cx,y,bwid,hh,[4,4,0,0]);else x.rect(cx,y,bwid,hh);x.fill();
+      if(porMeta&&AS.length>1){x.strokeStyle=A.maq.cor;x.lineWidth=1.6;x.stroke()}
       if(rot&&AS.length<=2&&bw>(forcaW?26:30)){x.fillStyle=T.tx;x.textAlign='center';
         x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
         x.fillText(v>=1000?nf(v/1000)+'k':nf(v),cx+bwid/2,y-8)}
@@ -53,8 +61,8 @@ function grafico(cv,forcaW,forcaH){
       x.strokeStyle=A.maq.cor;x.lineWidth=2.2;x.lineJoin='round';x.beginPath();
       series[k].forEach((v,j)=>{const px=pad.l+bw*j+bw/2;j?x.lineTo(px,Y(v)):x.moveTo(px,Y(v))});x.stroke();
       if(idx.length<=40)series[k].forEach((v,j)=>{const px=pad.l+bw*j+bw/2;
-        x.fillStyle=A.maq.cor;x.beginPath();x.arc(px,Y(v),3.2,0,7);x.fill();
-        x.strokeStyle=T.card;x.lineWidth=1.5;x.stroke()});
+        x.fillStyle=corDe(A,idx[j]);x.beginPath();x.arc(px,Y(v),porMeta?4.2:3.2,0,7);x.fill();
+        x.strokeStyle=porMeta?A.maq.cor:T.card;x.lineWidth=1.6;x.stroke()});
     });
   }
   const pulo=Math.max(1,Math.ceil(idx.length/(iw/(forcaW?38:52))));
@@ -72,11 +80,26 @@ function grafico(cv,forcaW,forcaH){
     x.fillStyle=T.tx3;x.textAlign='left';x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
     x.fillText('capacidade '+nf(capMax/1000)+'k',pad.l+5,Y(capMax)-8);
   }
-  if(!acum&&secaoAtiva('meta')&&metaMax>0){
-    x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);
-    x.beginPath();x.moveTo(pad.l,Y(metaMax));x.lineTo(w-pad.r,Y(metaMax));x.stroke();x.setLineDash([]);
-    x.fillStyle=T.meta;x.textAlign='left';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
-    x.fillText('meta '+nf(metaMax/1000)+'k',pad.l+5,Y(metaMax)-8);
+  if(!acum&&secaoAtiva('meta')){
+    /* A meta pode mudar de hora para hora quando o catálogo troca, então a
+       linha é um degrau que acompanha o planejado de cada recorte. */
+    const A0=AS[0],metas=idx.map(i=>A0.linhas[i].planMetaBase);
+    x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);x.beginPath();
+    let desenhou=false;
+    metas.forEach((mv,j)=>{
+      if(mv==null||!isFinite(mv))return;
+      const x0=pad.l+bw*j,x1=x0+bw,yv=Y(mv);
+      if(!desenhou){x.moveTo(x0,yv);desenhou=true}else x.lineTo(x0,yv);
+      x.lineTo(x1,yv);
+    });
+    if(desenhou)x.stroke();
+    x.setLineDash([]);
+    /* rótulo à direita para nunca colidir com o da capacidade, que fica à esquerda */
+    const ref=metas.find(v=>v!=null&&isFinite(v));
+    if(ref!=null){
+      x.fillStyle=T.meta;x.textAlign='right';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
+      x.fillText('meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref)),w-pad.r-5,Y(ref)-8);
+    }
   }
 }
 
