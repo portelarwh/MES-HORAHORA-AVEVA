@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
   <title>MES Hora a Hora — AVEVA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,6 +14,7 @@
   <link rel="stylesheet" href="css/03-layout.css">
   <link rel="stylesheet" href="css/04-components.css">
   <link rel="stylesheet" href="css/05-report.css">
+  <link rel="stylesheet" href="css/06-detalhe.css">
 </head>
 <body>
 <div class="wrap">
@@ -43,27 +45,60 @@
   <section>
     <div class="card">
       <div class="bar-tools">
-        <div class="fld"><label for="a_de">De</label><input type="date" id="a_de"></div>
-        <div class="fld"><label for="a_ate">Até</label><input type="date" id="a_ate"></div>
-        <div class="fld"><label for="a_gran">Agrupar por</label>
+        <div class="fld"><label for="a_de">De (data)</label><input type="date" id="a_de"></div>
+        <div class="fld" style="min-width:120px"><label for="a_hde">De (horário)</label><input type="time" id="a_hde" value="00:00"></div>
+        <div class="fld"><label for="a_ate">Até (data)</label><input type="date" id="a_ate"></div>
+        <div class="fld" style="min-width:120px"><label for="a_hate">Até (horário)</label><input type="time" id="a_hate" value="00:00"></div>
+        <button type="button" class="act pri" id="a_go">Atualizar</button>
+      </div>
+      <p class="note" style="margin-top:0;margin-bottom:14px">No campo <b>Até (horário)</b>, <b>00:00</b> significa
+        “até o fim do dia escolhido”. Qualquer outro horário corta o período exatamente ali, e todos os cálculos
+        passam a valer só para esse intervalo.</p>
+
+      <div class="sublbl">Filtros rápidos</div>
+      <div class="acts" style="margin-top:0;margin-bottom:16px" id="a_rapidos">
+        <button type="button" class="act" data-rap="turno">Turno atual</button>
+        <button type="button" class="act" data-rap="hoje">Hoje</button>
+        <button type="button" class="act" data-rap="ontem">Ontem</button>
+        <button type="button" class="act" data-rap="24h">Últimas 24 h</button>
+        <button type="button" class="act" data-rap="7d">Últimos 7 dias</button>
+        <button type="button" class="act" data-rap="mes">Este mês</button>
+      </div>
+
+      <div class="bar-tools">
+        <div class="fld" style="min-width:230px"><label for="a_base">Base do cálculo</label>
+          <select id="a_base"></select></div>
+        <div class="fld"><label for="a_gran">Agrupar o gráfico por</label>
           <select id="a_gran"><option value="hora">Hora</option><option value="turno">Turno</option><option value="dia">Dia</option></select></div>
         <div class="fld"><label for="a_tipo">Gráfico</label>
           <select id="a_tipo"><option value="auto">Automático</option><option value="barras">Barras</option><option value="linhas">Linhas</option></select></div>
         <div class="fld"><label for="a_lim">Parada acima de (min)</label><input type="number" id="a_lim" value="3" min="0.5" step="0.5"></div>
-        <div class="fld" style="min-width:270px"><label for="a_borda">Produção fora do horário principal</label>
+        <div class="fld"><label for="a_limsd">Sem dados acima de (min)</label><input type="number" id="a_limsd" value="30" min="1" step="1"></div>
+        <div class="fld" style="min-width:270px"><label for="a_borda">Turno desconsiderado</label>
           <select id="a_borda"></select></div>
-        <button type="button" class="act pri" id="a_go">Atualizar</button>
       </div>
+      <p class="note" id="a_basehelp" style="margin-top:0"></p>
+
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
       <div class="sublbl" style="margin-top:14px">Seções e camadas</div>
       <div class="opts" id="a_ops"></div>
-      <div class="sublbl" style="margin-top:16px">Relatórios</div>
+      <div class="sublbl" style="margin-top:16px">Relatórios e apresentação</div>
       <div class="acts" style="margin-top:0">
         <button type="button" class="act pri" id="r_a4">Relatório executivo A4</button>
         <button type="button" class="act" id="r_wa">Resumo para WhatsApp</button>
         <button type="button" class="act" id="r_em">Texto para e-mail</button>
+        <button type="button" class="act" id="a_cards">Escolher cartões</button>
+        <button type="button" class="act dgr" id="a_limpar">Limpar relatório</button>
       </div>
+      <div class="sublbl" style="margin-top:16px">Atualização automática</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <label class="opt" for="a_auto"><input type="checkbox" id="a_auto">Reler a base periodicamente</label>
+        <div class="fld" style="min-width:150px"><label for="a_autoseg">Intervalo (s)</label>
+          <input type="number" id="a_autoseg" value="120" min="30" step="30"></div>
+      </div>
+      <p class="note" id="a_autoinfo" style="margin-top:0">Desligada. Quando ligada, a mensagem diz se a base
+        realmente recebeu registros novos ou se a tela apenas foi recalculada.</p>
     </div>
   </section>
 
@@ -180,13 +215,19 @@
 </form></dialog>
 <div id="toast"></div>
 <script src="js/00-core.js"></script>
+<script src="js/01-format.js"></script>
+<script src="js/02-config.js"></script>
 <script src="js/10-db.js"></script>
 <script src="js/20-csv.js"></script>
 <script src="js/30-import.js"></script>
 <script src="js/40-metrics.js"></script>
+<script src="js/41-quality.js"></script>
+<script src="js/45-analise.js"></script>
 <script src="js/50-render.js"></script>
+<script src="js/51-registros.js"></script>
 <script src="js/60-charts.js"></script>
 <script src="js/70-reports.js"></script>
+<script src="js/75-export.js"></script>
 <script src="js/80-maquinas.js"></script>
 <script src="js/81-turnos.js"></script>
 <script src="js/82-lancamentos.js"></script>

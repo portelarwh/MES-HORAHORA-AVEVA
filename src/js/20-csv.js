@@ -31,3 +31,5 @@ function parseDate(s,fmt){const t=String(s).trim();
   if(ap==='PM'&&h<12)h+=12;if(ap==='AM'&&h===12)h=0;
   const d=new Date(Y,mo-1,da,h,+m[5],+(m[6]||0),+((m[7]||'0').padEnd(3,'0')));
   return isNaN(d.getTime())?null:d;}
+
+if(typeof module!=='undefined'&&module.exports)module.exports={splitLine,parseCSV,toNum,detectFmt,parseDate};

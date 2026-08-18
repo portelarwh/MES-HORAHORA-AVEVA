@@ -1,4 +1,9 @@
-/* 83-dados.js — Cobertura da base, backup e restauração. */
+/* 83-dados.js — Cobertura da base, backup e restauração.
+
+   O backup carrega os dados de produção (IndexedDB) e, num campo separado,
+   as preferências de tela (localStorage). Restaurar um backup de versão
+   anterior, sem esse campo, continua funcionando: as preferências atuais
+   simplesmente são mantidas. */
 "use strict";
 
 async function montarDados(){
@@ -22,8 +27,9 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:3,exportado:new Date().toISOString(),maquinas:await getAll('maquinas'),
-    turnos:await getAll('turnos'),ajustes:await getAll('ajustes'),dias:await getAll('dias')};
+  const bk={versao:4,dbVersao:DB_VER,exportado:new Date().toISOString(),
+    maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
+    ajustes:await getAll('ajustes'),dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(bk)],{type:'application/json'}));
   a.download='backup-monitor-hh-'+iso(new Date())+'.json';a.click();toast('Backup gerado')});
@@ -43,13 +49,16 @@ $('db_file').addEventListener('change',e=>{
           d.pts=[...mp.entries()].sort((a,b)=>a[0]-b[0])}
         await put('dias',d);
       }
+      if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
       await recarregar();montarMaquinas();montarTurnos();montarDia();montarAnalise();montarDados();
-      toast('Backup restaurado e mesclado');
-    }catch(x){toast('Arquivo de backup inválido')}
+      toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
+    }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };
   rd.readAsText(f);e.target.value=''});
+/* Apagar a base é diferente de limpar o relatório: aquele botão, na aba
+   Análise, só limpa a tela. Este remove os registros importados. */
 $('db_del').addEventListener('click',async()=>{
-  if(!confirm('Apagar todos os registros de produção? Máquinas, turnos e lançamentos são mantidos.'))return;
+  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
   await clearS('dias');await montarDados();
   $('a_out').innerHTML='';$('a_vazio').style.display='block';$('relbox').classList.remove('on');LAST=null;
   toast('Registros de produção apagados')});

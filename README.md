@@ -1,6 +1,9 @@
 # MES Hora a Hora — AVEVA
 
-Ferramenta local que transforma a exportação bruta do contador do **AVEVA Historian** em análise de produção hora a hora: OEE, fechamento por turno, detecção de paradas e relatórios prontos para envio.
+Ferramenta local que transforma a exportação bruta do contador do **AVEVA
+Historian** em análise de produção: fechamento por turno, análise hora a hora,
+cada caixa registrada, OEE por base declarada, separação entre parada e ausência
+de dados, qualidade da coleta e relatórios prontos para envio.
 
 Roda inteiramente no navegador. Nenhum dado sai da máquina de quem usa.
 
@@ -10,7 +13,11 @@ Roda inteiramente no navegador. Nenhum dado sai da máquina de quem usa.
 
 ## O problema
 
-O historian entrega uma tabela de duas colunas — carimbo de tempo e valor acumulado de um contador. Ela não diz quanto se produziu por hora, não sabe o que é um turno, não conhece a velocidade da máquina e trata qualquer intervalo sem incremento como silêncio. Transformar isso em indicador dá trabalho manual toda vez, e o trabalho manual não sobrevive à auditoria.
+O historian entrega uma tabela de duas colunas — carimbo de tempo e valor
+acumulado de um contador. Ela não diz quanto se produziu por hora, não sabe o que
+é um turno, não conhece a velocidade da máquina e não distingue “a máquina parou”
+de “eu deixei de gravar”. Transformar isso em indicador dá trabalho manual toda
+vez, e o trabalho manual não sobrevive à auditoria.
 
 Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 
@@ -19,23 +26,37 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Recurso | Descrição |
 | --- | --- |
 | Importação histórica | Vários arquivos de uma vez, gravados por máquina e por dia em IndexedDB. Reimportar período já carregado não duplica: a mesclagem é por carimbo de tempo. |
+| Janela exata | Filtro por **data e horário** inicial e final. Todo cálculo respeita o intervalo escolhido, inclusive quando ele começa ou termina no meio da hora. |
+| Filtros rápidos | Turno atual, hoje, ontem, últimas 24 h, últimos 7 dias, este mês. |
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade e meta em peças por hora. |
-| Turnos | Aceitam virada de meia-noite. Seletor decide se a produção de borda fica no turno que a cobre ou é anexada ao turno seguinte. |
-| OEE | `produzido ÷ (capacidade × tempo disponível)`, com variante parcial que usa a janela até o último registro — serve para turno em andamento. |
-| Detecção de paradas | Intervalos sem incremento acima de um limiar configurável, recortados na virada de cada período. |
-| Lançamentos manuais | Abono, hora extra, parada justificada, refugo e retrabalho. |
-| Comparação entre máquinas | Séries sobrepostas na mesma linha do tempo, com faixa de cadência por máquina. |
-| Relatórios | Página A4 executiva para impressão ou PDF, resumo curto para WhatsApp e texto longo para e-mail. |
+| Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
+| Meta proporcional | A meta acompanha a base escolhida: meia hora de análise cobra meia hora de meta. |
+| OEE em quatro leituras | Programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
+| Parada ≠ ausência de dados | Dois limiares separam “a máquina parou” de “o historian não gravou”. Falta de dado nunca vira parada. |
+| Qualidade dos dados | Cobertura, resets, deltas maiores que 1, registros sem alteração, carimbos repetidos ou fora de ordem, produção não atribuída — com classificação e painel de validação. |
+| Registros individuais | Cada marcação do contador com o carimbo original, delta, intervalo e classificação. Expansão por hora mostra só os registros daquela janela. |
+| Rastreabilidade | Cada indicador com a fórmula e os números que entraram nela. |
+| Cartões selecionáveis | O usuário escolhe o que aparece no resumo; a escolha fica salva. |
+| Relatórios | Página A4 executiva para impressão ou PDF, resumo curto para WhatsApp, texto longo para e-mail, e cinco exportações em CSV. |
+
+## Requisitos
+
+- Para **usar**: um navegador atual. Nada mais.
+- Para **desenvolver**: Node 18 ou superior, só para os scripts de verificação,
+  teste e build. O projeto não tem dependência de runtime nem etapa de bundling.
 
 ## Como usar
 
 ### Publicado
 
-Ative o GitHub Pages em **Settings → Pages → Source: GitHub Actions**. O workflow em `.github/workflows/pages.yml` publica a pasta `src/` a cada push na `main`.
+Ative o GitHub Pages em **Settings → Pages → Source: GitHub Actions**. O workflow
+em `.github/workflows/pages.yml` publica a pasta `src/` a cada push na `main`.
 
 ### Local, sem servidor
 
-Baixe [`dist/mes-horahora.html`](dist/mes-horahora.html) e abra com duplo clique. É um arquivo só, com todo o CSS e JS embutidos — a forma indicada para uso no chão de fábrica, onde nem sempre há servidor ou rede liberada.
+Baixe [`dist/mes-horahora.html`](dist/mes-horahora.html) e abra com duplo clique.
+É um arquivo só, com todo o CSS e JS embutidos — a forma indicada para uso no chão
+de fábrica, onde nem sempre há servidor ou rede liberada.
 
 ### Desenvolvimento
 
@@ -44,32 +65,185 @@ git clone https://github.com/portelarwh/MES-HORAHORA-AVEVA.git
 cd MES-HORAHORA-AVEVA
 
 npm run dev      # servidor local em http://localhost:5173
-npm run check    # sintaxe dos módulos e referências no index.html
+npm run check    # sintaxe, referências, ids únicos e botões sem handler
+npm test         # testes automatizados das fórmulas
 npm run build    # regenera dist/mes-horahora.html
+npm run verify   # check + test + build, na ordem
 ```
 
-Não há dependências de runtime nem etapa de bundling: o `src/` são arquivos estáticos que o navegador carrega direto. O Node só é usado pelos scripts de build e verificação.
+Não há `npm install`: o projeto não tem dependências. O `npm run dev` usa `npx serve`
+só como servidor estático — qualquer outro serve igual, inclusive
+`python3 -m http.server`.
 
 ## Primeiros passos na ferramenta
 
-1. **Máquinas** — cadastre o equipamento. Informe se cada incremento do contador é uma peça ou um lote, e quantas peças por lote. Capacidade e meta são sempre em peças por hora.
+1. **Máquinas** — cadastre o equipamento. Informe se cada incremento do contador é
+   uma peça ou um lote, e quantas peças por lote. Capacidade e meta são sempre em
+   peças por hora.
 2. **Turnos** — use o botão de três turnos padrão e ajuste os horários.
-3. **Importar** — solte os CSV. Com mais de uma máquina cadastrada, a ferramenta pergunta de qual é o arquivo.
-4. **Análise** — escolha o período, as máquinas e clique em Atualizar.
+3. **Importar** — solte os CSV. Com mais de uma máquina cadastrada, a ferramenta
+   pergunta de qual é o arquivo.
+4. **Análise** — escolha o período (data **e** horário), a base de cálculo, as
+   máquinas, e clique em Atualizar.
 
-Há um arquivo de exemplo em [`samples/EXEMPLO_LINHA_01.csv`](samples/EXEMPLO_LINHA_01.csv) com 8 horas de dados sintéticos no mesmo formato do historian.
+Há um arquivo de exemplo em
+[`samples/EXEMPLO_LINHA_01.csv`](samples/EXEMPLO_LINHA_01.csv) com 8 horas de
+dados sintéticos no mesmo formato do historian.
 
-## Documentação
+### Formato esperado do arquivo
 
-- [Métricas e critérios de cálculo](docs/METRICAS.md) — como OEE, tempo disponível, atingimento e paradas são apurados
-- [Formato do CSV](docs/FORMATO-CSV.md) — o que a leitura aceita e como resolver arquivos que não entram
-- [Arquitetura](docs/ARQUITETURA.md) — organização das pastas, ordem de carregamento e modelo de dados
+Duas colunas: uma de tempo e uma com o valor acumulado do contador.
+
+```csv
+Time,VAEB01_MES_GoodCount
+8/17/2026 6:24:46.857 AM,1006194
+8/17/2026 6:25:31.204 AM,1006195
+```
+
+Separador, decimal, BOM, aspas e formato de data são detectados sozinhos, com
+possibilidade de forçar manualmente. Detalhes e diagnóstico de arquivos que não
+entram em [`docs/FORMATO-CSV.md`](docs/FORMATO-CSV.md).
+
+## Como os números são apurados
+
+O resumo está abaixo; as fórmulas completas, com exemplos que podem ser refeitos
+na mão, estão em **[`docs/calculos.md`](docs/calculos.md)**.
+
+### Turnos
+
+Cadastrados por horário de início e fim, aceitam virada de meia-noite. As
+ocorrências são geradas dia a dia, recortadas na janela selecionada e garantidas
+sem sobreposição — nenhum registro entra em dois turnos. Cada linha traz o status:
+fechado, em andamento, ainda não começou, recortado pelo filtro ou sem dados.
+
+### Turno desconsiderado
+
+O seletor **“Turno desconsiderado”** faz o turno escolhido deixar de existir como
+linha: sua janela é absorvida pelo turno cronologicamente seguinte, marcado como
+*turno anexado*. Caixas fechadas às 05h30 com o 1º turno começando às 06h00 vão
+para o 3º turno no modo normal, e para o 1º turno quando o 3º é desconsiderado —
+sem virar hora extra e sem perder nenhum minuto do período.
+
+### Os tempos
+
+```
+período selecionado = fim − início do filtro
+tempo com dados     = trechos do período cobertos por registros
+tempo sem dados     = período − tempo com dados          (nunca é parada)
+tempo parado        = intervalos entre os dois limiares
+```
+
+E as quatro bases: `programado` (período − abono), `observado` (com dados −
+abono), `operacional` (observado − paradas) e `parcial` (início do período até a
+última marcação − abono).
+
+### Produção, meta e OEE
+
+```
+peças              = incrementos × peças por incremento
+meta proporcional  = meta (peças/h) × base ÷ 60
+atingimento        = peças ÷ meta proporcional
+planejado          = capacidade (peças/h) × base ÷ 60
+OEE                = peças ÷ planejado
+```
+
+| Leitura | Base do denominador |
+| --- | --- |
+| OEE programado | período selecionado − abono |
+| OEE observado | tempo com dados − abono |
+| OEE operacional | observado − paradas detectadas |
+| OEE parcial | início do período até a última marcação |
+
+O OEE parcial serve para turno em andamento: não pune por horas que ainda não
+aconteceram. A base usada aparece sempre junto do número.
+
+### Parada e ausência de dados
+
+Cada intervalo entre dois registros é classificado por dois limiares
+configuráveis: até 3 min é operação normal, entre 3 e 30 min é **parada
+detectada**, acima de 30 min é **ausência de dados**. O tempo sem dados fica fora
+do denominador observado e nunca é lançado como parada.
+
+### Quando um indicador não pode ser calculado
+
+Aparece **“—”**, nunca 0%. Zero por cento só aparece quando a conta foi feita e
+deu zero.
+
+## Armazenamento
+
+### IndexedDB
+
+Banco `monitor-hh`, **versão 1** — não alterada nesta revisão. Quatro stores:
+`maquinas`, `turnos`, `ajustes` e `dias`. Os registros do contador ficam em `dias`,
+com a chave `maquinaId|AAAA-MM-DD`, o que permite ler apenas a faixa de datas da
+análise em vez da base inteira.
+
+Bases criadas por versões anteriores continuam sendo lidas sem conversão.
+
+### Configurações
+
+Ficam no `localStorage`, separadas dos dados de produção:
+
+| Chave | Conteúdo |
+| --- | --- |
+| `hh-tema` | claro ou escuro |
+| `hh-prefs` | cartões visíveis, seções, base de cálculo, limiares, horários do filtro, turno desconsiderado, atualização automática |
+
+Apagar a base de produção não mexe nas preferências, e vice-versa.
+
+### Backup
+
+**Base de dados → Exportar backup** gera um JSON com máquinas, turnos,
+lançamentos, todos os dias de registros e, em campo separado, as preferências.
+A restauração **mescla** por carimbo de tempo, então restaurar duas vezes não
+duplica nada. Backups de versões anteriores, sem o campo de preferências, são
+restaurados normalmente.
+
+Guarde o arquivo fora do repositório: a base local vive no navegador e some se o
+cache for limpo.
+
+## Limitações conhecidas
+
+- **Produção não atribuída.** Incrementos que aparecem depois de uma lacuna não
+  entram na produção do período: não há como afirmar em que momento foram
+  produzidos. A quantidade é reportada no painel de qualidade em vez de ser
+  distribuída em horários inventados.
+- **Paradas vêm do contador**, não do apontamento. Ausência de incremento pode ser
+  máquina parada ou cadência abaixo do limiar. Confronte com o MES antes de
+  transformar em indicador formal.
+- **OEE não é a decomposição clássica** em disponibilidade × performance ×
+  qualidade. É a razão entre o produzido e o que a velocidade nominal entregaria
+  na base escolhida.
+- **Fontes por CDN.** A tipografia vem do Google Fonts. Em rede que bloqueia o
+  domínio a página funciona com as fontes de sistema, mas o navegador registra o
+  bloqueio no console.
+- **Um contador por máquina.** Não há suporte a múltiplas tags por equipamento.
+- **Sem fonte de dados externa.** A leitura é por arquivo; não há conexão direta
+  ao historian.
+
+## Próximas melhorias planejadas
+
+- Virtualização da lista de registros para períodos de vários meses, hoje resolvida
+  por carregamento progressivo em blocos.
+- Comparação entre períodos equivalentes (turno contra o mesmo turno da véspera).
+- Motivos de parada vindos de arquivo, para casar automaticamente com as paradas
+  detectadas.
+- Exportação do relatório executivo em PDF sem passar pela caixa de impressão.
 
 ## Aviso sobre dados
 
-Este repositório é **público**. Não versione exportações reais de produção: o `.gitignore` bloqueia `*.csv` fora de `samples/`, e backups `.json` da ferramenta também estão bloqueados. A base local vive no IndexedDB do navegador e some se o cache for limpo — use **Base de dados → Exportar backup** com regularidade e guarde o arquivo fora do repositório.
+Este repositório é **público**. Não versione exportações reais de produção: o
+`.gitignore` bloqueia `*.csv` fora de `samples/`, e backups `.json` da ferramenta
+também estão bloqueados.
 
-Os números produzidos aqui derivam de um contador, não do apontamento oficial. As paradas detectadas vêm da ausência de incremento e devem ser confrontadas com o MES antes de virarem indicador formal.
+Os números produzidos aqui derivam de um contador, não do apontamento oficial.
+
+## Documentação
+
+- [Cálculos, com exemplos verificáveis](docs/calculos.md) — a referência completa das fórmulas
+- [Métricas — visão rápida](docs/METRICAS.md) — o resumo de uma página
+- [Formato do CSV](docs/FORMATO-CSV.md) — o que a leitura aceita e como resolver arquivos que não entram
+- [Arquitetura](docs/ARQUITETURA.md) — organização das pastas, ordem de carregamento e modelo de dados
 
 ## Licença
 

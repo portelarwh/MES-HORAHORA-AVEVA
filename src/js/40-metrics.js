@@ -1,156 +1,294 @@
-/* 40-metrics.js — Motor de métricas: janela, tempo disponível, OEE, turnos. */
+/* 40-metrics.js — Motor de cálculo. Módulo puro: nenhuma função aqui lê o DOM
+   nem o estado global da tela, todas recebem o que precisam por parâmetro.
+   É o módulo carregado pelos testes automatizados.
+
+   Conceitos de tempo, do maior para o menor:
+
+     período selecionado   fim − início do filtro (data + horário), exato
+     tempo com dados       parte do período coberta por registros do contador
+     tempo sem dados       período − tempo com dados (nunca vira parada)
+     tempo programado      período − abono          -> base "período selecionado"
+     tempo observado       tempo com dados − abono  -> base "janela com dados"
+     tempo operacional     observado − paradas      -> base "tempo rodando"
+     tempo parcial         início do período até a última marcação, − abono
+
+   Parada e ausência de dados são coisas diferentes e nunca se confundem:
+   o intervalo entre dois registros é classificado por dois limiares. */
 "use strict";
 
-async function carregarPontos(id,de,ate){
-  return (await getAll('dias')).filter(r=>r.maquinaId===id&&r.data>=de&&r.data<=ate)
-    .sort((a,b)=>a.data.localeCompare(b.data));
-}
-function analisarMaquina(maq,dias,limMin){
-  const ev=[],janelas=[],paradas=[];let resets=0,frac=0;
-  const limS=limMin*60;
-  for(const d of dias){
-    const pts=d.pts;if(pts.length<2)continue;
-    janelas.push({ini:pts[0][0],fim:pts[pts.length-1][0]});
-    for(const p of pts)if(!Number.isInteger(p[1]))frac++;
-    for(let i=1;i<pts.length;i++){
-      let dd=pts[i][1]-pts[i-1][1];
-      if(dd<0){resets++;dd=Math.max(0,pts[i][1]-(maq.offset||0))}
-      const gap=(pts[i][0]-pts[i-1][0])/1000;
-      ev.push({t:pts[i][0],t0:pts[i-1][0],gap,inc:dd});
-      if(gap>limS)paradas.push({ini:pts[i-1][0],fim:pts[i][0],min:gap/60});
-    }
+const pecas=m=>m.modo==='unidade'?1:(m.porInc||1);
+
+/* sobreposição de dois intervalos, em minutos */
+const ovl=(a1,a2,b1,b2)=>Math.max(0,(Math.min(a2,b2)-Math.max(a1,b1))/60000);
+
+/* --- segmentos: listas de {a,b} em ms, ordenadas e disjuntas ------------- */
+function unirSegs(segs){
+  const s=segs.filter(g=>g.b>g.a).sort((x,y)=>x.a-y.a),out=[];
+  for(const g of s){
+    const u=out[out.length-1];
+    if(u&&g.a<=u.b)u.b=Math.max(u.b,g.b);else out.push({a:g.a,b:g.b});
   }
-  const tcs=ev.filter(e=>e.inc>0).map(e=>e.gap/e.inc).sort((a,b)=>a-b);
-  const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
-  return{maq,ev,janelas,paradas:paradas.sort((a,b)=>b.min-a.min),resets,frac,
-    tcP10:q(.10),tcMed:q(.50),
-    primeiro:janelas.length?Math.min(...janelas.map(j=>j.ini)):0,
-    ultimo:janelas.length?Math.max(...janelas.map(j=>j.fim)):0};
+  return out;
 }
-function lancDe(id,a,b,pc){
-  const r={abono:0,extra:0,paradaJust:0,refugo:0,retrab:0,motivos:[]};
-  for(const j of AJU){
+function ovlSegs(segs,a,b){let s=0;for(const g of segs)s+=ovl(g.a,g.b,a,b);return s}
+function recortarSegs(segs,a,b){
+  return segs.map(g=>({...g,a:Math.max(g.a,a),b:Math.min(g.b,b)})).filter(g=>g.b>g.a);
+}
+/* complemento de segs dentro de [ini,fim) */
+function inverterSegs(segs,ini,fim){
+  const u=unirSegs(recortarSegs(segs,ini,fim)),out=[];let p=ini;
+  for(const g of u){if(g.a>p)out.push({a:p,b:g.a});p=Math.max(p,g.b)}
+  if(p<fim)out.push({a:p,b:fim});
+  return out;
+}
+
+/* --- classificação do intervalo entre dois registros --------------------- */
+const NORMAL='normal',PARADA='parada',SEMDADOS='semdados';
+function classificar(gapS,limParadaS,limSemDadosS){
+  if(gapS>limSemDadosS)return SEMDADOS;
+  if(gapS>limParadaS)return PARADA;
+  return NORMAL;
+}
+
+/* --- série contínua ------------------------------------------------------
+   Junta os dias importados numa única série ordenada. Ao contrário da versão
+   anterior, a série NÃO é quebrada na meia-noite: um incremento entre 23h59 e
+   00h01 deixa de ser perdido. A separação passa a ser feita pelos limiares,
+   que é o critério real — dia é só a chave de armazenamento. */
+function serieDePontos(dias){
+  const mapa=new Map();
+  let duplicados=0,foraDeOrdem=0,frac=0,anterior=-Infinity;
+  for(const d of dias)for(const p of d.pts){
+    const t=p[0],v=p[1];
+    if(!Number.isFinite(t)||!Number.isFinite(v))continue;
+    if(t<anterior)foraDeOrdem++;
+    anterior=t;
+    if(mapa.has(t)&&mapa.get(t)!==v)duplicados++;
+    else if(mapa.has(t))duplicados++;
+    if(!Number.isInteger(v))frac++;
+    mapa.set(t,v);
+  }
+  const pts=[...mapa.entries()].sort((a,b)=>a[0]-b[0]);
+  return{pts,duplicados,foraDeOrdem,frac};
+}
+
+/* --- análise de uma máquina dentro da janela exata ----------------------- */
+/* opts: {ini, fim, limParadaMin, limSemDadosMin, ajustes, base} */
+function analisarMaquina(maq,dias,opts){
+  const ini=opts.ini,fim=opts.fim;
+  const limParadaS=Math.max(0,opts.limParadaMin||0)*60;
+  const limSemDadosS=Math.max(limParadaS/60,opts.limSemDadosMin||0)*60;
+  const S=serieDePontos(dias),pts=S.pts,pc=pecas(maq);
+
+  const eventos=[],paradas=[],lacunas=[],cobertura=[];
+  let resets=0,semAlteracao=0,deltasMaiores=0,naoAtribuido=0,eventosNaoAtrib=0;
+
+  for(let i=1;i<pts.length;i++){
+    const t0=pts[i-1][0],t=pts[i][0],gapS=(t-t0)/1000;
+    const classe=classificar(gapS,limParadaS,limSemDadosS);
+    if(classe===SEMDADOS)lacunas.push({a:t0,b:t,origem:'lacuna'});
+    else cobertura.push({a:t0,b:t});
+    if(classe===PARADA)paradas.push({a:t0,b:t,min:gapS/60});
+
+    if(t<ini||t>=fim)continue;                     // fora da janela exata
+    let delta=pts[i][1]-pts[i-1][1],reset=false;
+    if(delta<0){reset=true;resets++;delta=Math.max(0,pts[i][1]-(maq.offset||0))}
+    if(delta===0)semAlteracao++;
+    if(delta>1)deltasMaiores++;
+    /* Um incremento só é atribuído ao período quando é possível dizer que ele
+       aconteceu dentro dele: intervalo com dados e começando dentro da janela
+       (ou curto o bastante para a borda ser irrelevante). O resto é reportado
+       como produção não atribuída, nunca espalhado em horários inventados. */
+    const contabiliza=classe!==SEMDADOS&&(t0>=ini||classe===NORMAL);
+    if(!contabiliza&&delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
+    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,
+      pecas:contabiliza?delta*pc:0});
+  }
+
+  /* ausência de dados antes do primeiro e depois do último registro da série */
+  if(!pts.length)lacunas.push({a:ini,b:fim,origem:'vazio'});
+  else{
+    if(pts[0][0]>ini)lacunas.push({a:ini,b:Math.min(pts[0][0],fim),origem:'antes'});
+    if(pts[pts.length-1][0]<fim)lacunas.push({a:Math.max(pts[pts.length-1][0],ini),b:fim,origem:'depois'});
+  }
+
+  const cob=unirSegs(recortarSegs(cobertura,ini,fim));
+  const lac=inverterSegs(cob,ini,fim).map(g=>({...g,min:(g.b-g.a)/60000}));
+  const par=recortarSegs(paradas,ini,fim).map(g=>({...g,min:(g.b-g.a)/60000}));
+
+  const dentro=pts.filter(p=>p[0]>=ini&&p[0]<fim);
+  const tcs=eventos.filter(e=>e.contabiliza&&e.delta>0).map(e=>e.gapS/e.delta).sort((a,b)=>a-b);
+  const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
+
+  return{maq,pc,ini,fim,base:opts.base||'programado',
+    ajustes:opts.ajustes||[],pts,dentro,eventos,
+    cobertura:cob,lacunas:lac.sort((a,b)=>b.min-a.min),
+    paradas:par.sort((a,b)=>b.min-a.min),
+    origem:{duplicados:S.duplicados,foraDeOrdem:S.foraDeOrdem,frac:S.frac},
+    resets,semAlteracao,deltasMaiores,naoAtribuido,eventosNaoAtrib,
+    tcP10:q(.10),tcMed:q(.50),
+    primeiro:dentro.length?dentro[0][0]:null,
+    ultimo:dentro.length?dentro[dentro.length-1][0]:null,
+    limParadaMin:limParadaS/60,limSemDadosMin:limSemDadosS/60};
+}
+
+/* --- lançamentos manuais ------------------------------------------------- */
+function lancDe(ajustes,id,a,b,pc){
+  const r={abono:0,extra:0,paradaJust:0,refugo:0,retrab:0,motivos:[],abonoSegs:[]};
+  for(const j of ajustes||[]){
     if(j.maquinaId!==id&&j.maquinaId!=='*')continue;
-    const p=j.data.split('-');
+    const p=String(j.data||'').split('-');
+    if(p.length<3)continue;
     if(j.tipo==='refugo'||j.tipo==='retrabalho'){
-      const d0=new Date(+p[0],+p[1]-1,+p[2]).getTime();
-      if(d0>=a-86400000&&d0<b&&ovl(d0,d0+86400000,a,b)>0){
-        const qt=(j.un==='inc'?j.qtd*pc:j.qtd)*(ovl(d0,d0+86400000,a,b)/1440);
+      /* quantidade lançada por dia, rateada pela fatia do dia dentro do recorte */
+      const d0=new Date(+p[0],+p[1]-1,+p[2]).getTime(),d1=d0+86400000;
+      const o=ovl(d0,d1,a,b);
+      if(o>0){
+        const qt=(j.un==='inc'?(j.qtd||0)*pc:(j.qtd||0))*(o/1440);
         if(j.tipo==='refugo')r.refugo+=qt;else r.retrab+=qt;
       }
       continue;
     }
-    const hh=(j.inicio||'00:00').split(':');
-    const i0=new Date(+p[0],+p[1]-1,+p[2],+hh[0],+hh[1]).getTime();
-    const o=ovl(i0,i0+(j.minutos||0)*60000,a,b);
+    const hh=String(j.inicio||'00:00').split(':');
+    const i0=new Date(+p[0],+p[1]-1,+p[2],+hh[0]||0,+hh[1]||0).getTime();
+    const i1=i0+(j.minutos||0)*60000;
+    const o=ovl(i0,i1,a,b);
     if(o>0){
-      if(j.tipo==='abono')r.abono+=o;
+      if(j.tipo==='abono'){r.abono+=o;r.abonoSegs.push({a:Math.max(i0,a),b:Math.min(i1,b)})}
       else if(j.tipo==='extra')r.extra+=o;
       else if(j.tipo==='parada'){r.paradaJust+=o;if(j.obs)r.motivos.push(j.obs)}
     }
   }
+  r.abonoSegs=unirSegs(r.abonoSegs);
   return r;
 }
-function turnosNoIntervalo(ini,fim,excluirId){
+
+/* --- núcleo: métricas de um recorte [a,b) ------------------------------- */
+function metricas(A,a,b){
+  const c=A.maq,pc=A.pc;
+  let inc=0,regs=0,naoAtrib=0,semAlt=0,resets=0,ultimoReg=null,primeiroReg=null;
+  for(const e of A.eventos){
+    if(e.t<a||e.t>=b)continue;
+    if(e.contabiliza)inc+=e.delta;else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.delta===0)semAlt++;
+    if(e.reset)resets++;
+  }
+  for(const p of A.dentro){
+    if(p[0]<a||p[0]>=b)continue;
+    regs++;
+    if(primeiroReg==null)primeiroReg=p[0];
+    ultimoReg=p[0];
+  }
+  const dur=(b-a)/60000;
+  const comDados=ovlSegs(A.cobertura,a,b);
+  const semDados=Math.max(0,dur-comDados);
+  const parado=ovlSegs(A.paradas,a,b);
+  const nPar=A.paradas.filter(p=>p.a>=a&&p.a<b).length;
+  const nLac=A.lacunas.filter(l=>l.a>=a&&l.a<b).length;
+
+  const L=lancDe(A.ajustes,c.id,a,b,pc);
+  const abono=L.abono;
+  const abonoCoberto=L.abonoSegs.reduce((s,g)=>s+ovlSegs(A.cobertura,g.a,g.b),0);
+
+  const programado=Math.max(0,dur-abono);
+  const observado=Math.max(0,comDados-abonoCoberto);
+  const operacional=Math.max(0,observado-parado);
+  let parcial=null;
+  if(ultimoReg!=null){
+    const abonoAte=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,a,ultimoReg),0);
+    parcial=Math.max(0,(ultimoReg-a)/60000-abonoAte);
+  }
+  const tempos={programado,observado,operacional,parcial};
+
+  const pcs=inc*pc;
+  const bom=Math.max(0,pcs-L.refugo-L.retrab);
+  const planCap={},planMeta={},oee={},ating={};
+  for(const k of Object.keys(tempos)){
+    const t=tempos[k];
+    planCap[k]=t==null?null:c.cap*(t/60);
+    planMeta[k]=t==null?null:c.meta*(t/60);
+    oee[k]=razao(pcs,planCap[k]);
+    ating[k]=razao(pcs,planMeta[k]);
+  }
+  const base=A.base||'programado';
+  return{a,b,dur,inc,regs,naoAtrib,semAlt,resets,nPar,nLac,
+    comDados,semDados,parado,abono,abonoCoberto,
+    extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
+    programado,observado,operacional,parcial,tempos,
+    primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
+    base,oeeBase:oee[base],atingBase:ating[base],
+    planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
+    oeeLiq:razao(bom,planCap[base]),
+    cobertura:razao(comDados,dur),
+    disp:razao(operacional,observado),
+    ritmo:razao(pcs,comDados/60),
+    ritmoOper:razao(pcs,operacional/60),
+    interv:razao(comDados*60,inc),
+    intervOper:razao(operacional*60,inc)};
+}
+
+/* --- turnos -------------------------------------------------------------- */
+/* Gera as ocorrências dos turnos que tocam [ini,fim), recortadas na janela.
+   Garante que nenhuma ocorrência se sobreponha a outra — sem isso o mesmo
+   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada. */
+function turnosNoIntervalo(turnos,ini,fim,excluirId){
+  if(!turnos||!turnos.length)return[];
   const out=[];
-  let d=new Date(ini);d.setHours(0,0,0,0);d.setDate(d.getDate()-1);
-  for(let k=0;k<420&&d.getTime()<fim+86400000;k++){
-    for(const t of TUR){
+  const d=new Date(ini);d.setHours(0,0,0,0);d.setDate(d.getDate()-1);
+  const limite=fim+86400000,maxDias=800;
+  for(let k=0;k<maxDias&&d.getTime()<limite;k++){
+    for(const t of turnos){
       const a=new Date(d);a.setHours(0,0,0,0);a.setMinutes(hm(t.inicio));
       const dur=((hm(t.fim)-hm(t.inicio)+1440)%1440)||1440;
       out.push({a:a.getTime(),b:a.getTime()+dur*60000,rot:t.nome,turnoId:t.id,
-        dia:pad2(a.getDate())+'/'+pad2(a.getMonth()+1)});
+        durCadastrada:dur,dia:ddmm(a)});
     }
     d.setDate(d.getDate()+1);
   }
-  out.sort((x,y)=>x.a-y.a);
+  out.sort((x,y)=>x.a-y.a||x.b-y.b);
+  for(let i=0;i<out.length-1;i++){
+    if(out[i].b>out[i+1].a){out[i].b=out[i+1].a;out[i].sobreposto=true;out[i+1].sobreposto=true}
+  }
+  let lista=out.filter(x=>x.b>x.a);
   if(excluirId){
     const keep=[];
-    for(let i=0;i<out.length;i++){
-      if(out[i].turnoId!==excluirId){keep.push(out[i]);continue}
+    for(let i=0;i<lista.length;i++){
+      if(lista[i].turnoId!==excluirId){keep.push(lista[i]);continue}
       let j=i+1;
-      while(j<out.length&&out[j].turnoId===excluirId)j++;
-      if(j<out.length){out[j].a=Math.min(out[j].a,out[i].a);out[j].anexado=true}
-      else if(keep.length){keep[keep.length-1].b=Math.max(keep[keep.length-1].b,out[i].b);keep[keep.length-1].anexado=true}
+      while(j<lista.length&&lista[j].turnoId===excluirId)j++;
+      if(j<lista.length){lista[j].a=Math.min(lista[j].a,lista[i].a);lista[j].anexado=true}
+      else if(keep.length){const u=keep[keep.length-1];u.b=Math.max(u.b,lista[i].b);u.anexado=true}
+      i=j-1;
     }
-    return keep.filter(x=>x.b>ini&&x.a<fim);
+    lista=keep;
   }
-  return out.filter(x=>x.b>ini&&x.a<fim);
+  return lista.filter(x=>x.b>ini&&x.a<fim).map(x=>({...x,
+    aCheio:x.a,bCheio:x.b,
+    a:Math.max(x.a,ini),b:Math.min(x.b,fim),
+    recortado:x.a<ini||x.b>fim}));
 }
-function bucketsDe(gran,ini,fim,excluirId){
-  if(gran==='dia'){
-    const B=[];let d=new Date(ini);d.setHours(0,0,0,0);
-    while(d.getTime()<fim){const n=new Date(d);n.setDate(n.getDate()+1);
-      B.push({a:d.getTime(),b:n.getTime(),rot:pad2(d.getDate())+'/'+pad2(d.getMonth()+1)});d=n}
-    return B;
+
+/* --- recortes de período ------------------------------------------------- */
+/* Todo bucket é recortado na janela: um período que começa 07h20 gera um
+   primeiro bucket de 07h20 às 08h00, e não uma hora cheia inventada. */
+function bucketsDe(gran,ini,fim,turnos,excluirId){
+  if(gran==='turno')return turnosNoIntervalo(turnos,ini,fim,excluirId);
+  const B=[],passoDia=gran==='dia';
+  let a=ini;
+  while(a<fim){
+    const d=new Date(a),n=new Date(a);
+    if(passoDia){n.setHours(0,0,0,0);n.setDate(n.getDate()+1)}
+    else{n.setMinutes(0,0,0);n.setTime(n.getTime()+3600000)}
+    const b=Math.min(n.getTime(),fim);
+    B.push({a,b,rot:passoDia?ddmm(d):pad2(d.getHours())+'h',
+      dia:passoDia?null:ddmm(d),
+      parcial:(b-a)<(passoDia?86400000:3600000)});
+    a=b;
   }
-  if(gran==='turno'&&TUR.length) return turnosNoIntervalo(ini,fim,excluirId);
-  const B=[];let d=new Date(ini);d.setMinutes(0,0,0);
-  while(d.getTime()<fim){const n=new Date(d.getTime()+3600000);
-    B.push({a:d.getTime(),b:n.getTime(),rot:pad2(d.getHours())+'h',dia:pad2(d.getDate())+'/'+pad2(d.getMonth()+1)});d=n}
   return B;
 }
-/* núcleo: métricas de um recorte de tempo para uma máquina */
-function metricas(A,a,b){
-  const c=A.maq,pc=pecas(c);
-  let inc=0,ap=0,parauto=0,npar=0,cob=0,ultimo=0;
-  for(const e of A.ev)if(e.t>=a&&e.t<b){inc+=e.inc;ap++;if(e.t>ultimo)ultimo=e.t}
-  for(const j of A.janelas){cob+=ovl(j.ini,j.fim,a,b);
-    if(j.ini>=a&&j.ini<b&&!ap)ultimo=Math.max(ultimo,j.ini)}
-  for(const p of A.paradas){const o=ovl(p.ini,p.fim,a,b);if(o>0){parauto+=o;if(p.ini>=a&&p.ini<b)npar++}}
-  const L=lancDe(c.id,a,b,pc);
-  const janela=cob;                                  // tempo coberto pelos dados
-  const planej=Math.max(0,janela-L.abono);            // tempo disponível
-  const oper=Math.max(0,planej-parauto);              // tempo efetivamente rodando
-  const pcs=inc*pc;
-  const bom=Math.max(0,pcs-L.refugo-L.retrab);
-  const capH=c.cap,metaH=c.meta;
-  const planCap=capH*(planej/60);                     // planejado = velocidade x tempo disponível
-  const planMeta=metaH*(planej/60);
-  const parcialMin=ultimo?Math.max(0,(ultimo-Math.max(a,A.primeiro||a))/60000-L.abono):0;
-  const planParcial=capH*(parcialMin/60);
-  return{a,b,inc,ap,npar,janela,planej,oper,parauto,pcs,bom,
-    abono:L.abono,extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
-    ultimo,parcialMin,planCap,planMeta,
-    oee:planCap>0?pcs/planCap:0,
-    oeeParcial:planParcial>0?pcs/planParcial:0,
-    oeeLiq:planCap>0?bom/planCap:0,
-    ating:planMeta>0?pcs/planMeta:0,
-    ritmo:janela>0?pcs/(janela/60):0,
-    ritmoOper:oper>0?pcs/(oper/60):0,
-    disp:planej>0?oper/planej:0,
-    interv:inc>0?(janela*60)/inc:null,
-    intervOper:inc>0?(oper*60)/inc:null};
-}
-async function rodarAnalise(){
-  const de=$('a_de').value,ate=$('a_ate').value;
-  const sel=[...document.querySelectorAll('#a_maqs input:checked')].map(i=>i.value);
-  if(!de||!ate||!sel.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';LAST=null;return}
-  const lim=+$('a_lim').value||3,gran=$('a_gran').value;
-  const bd=$('a_borda').value||'todos';
-  const excl=bd.startsWith('sem:')?bd.slice(4):null;
-  const AS=[];
-  for(const id of sel){
-    const m=MAQ.find(x=>x.id===id);if(!m)continue;
-    const dias=await carregarPontos(id,de,ate);if(!dias.length)continue;
-    AS.push(analisarMaquina(m,dias,lim));
-  }
-  if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';LAST=null;
-    toast('Nenhum dado importado nesse período');return}
-  $('a_vazio').style.display='none';
-  const ini=Math.min(...AS.map(a=>a.primeiro)),fim=Math.max(...AS.map(a=>a.ultimo));
-  const B=bucketsDe(gran,ini,fim,excl);
-  const BT=TUR.length?turnosNoIntervalo(ini,fim,excl):[];
-  for(const A of AS){
-    A.linhas=B.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.turnos=BT.map(bk=>{
-      const m=metricas(A,bk.a,bk.b);
-      const durTurno=(bk.b-bk.a)/60000;
-      const planTurno=A.maq.cap*Math.max(0,durTurno-m.abono)/60;
-      return{bk,...m,durTurno,planTurno,oeeTurno:planTurno>0?m.pcs/planTurno:0};
-    }).filter(x=>x.janela>0||x.abono>0);
-    A.tot=metricas(A,ini,fim+1);
-  }
-  LAST={AS,B,BT,ini,fim,gran,lim,de,ate,excl};
-  renderAnalise();
-}
+
+if(typeof module!=='undefined'&&module.exports)module.exports={
+  pecas,ovl,unirSegs,ovlSegs,recortarSegs,inverterSegs,classificar,
+  NORMAL,PARADA,SEMDADOS,serieDePontos,analisarMaquina,lancDe,metricas,
+  turnosNoIntervalo,bucketsDe};

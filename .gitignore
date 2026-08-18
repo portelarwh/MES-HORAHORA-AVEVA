@@ -1,0 +1,28 @@
+# Dados reais de produção nunca entram no repositório, que é público.
+# A exceção é a pasta samples/, com dados sintéticos de demonstração.
+*.csv
+!samples/*.csv
+*.txt
+!docs/*.txt
+
+# Backups gerados pela ferramenta (contêm a base de produção inteira)
+backup-monitor-hh-*.json
+mes-*.csv
+
+# Node
+node_modules/
+npm-debug.log*
+.npm/
+
+# Ambiente e editor
+.env
+.env.*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Saídas temporárias
+/tmp/
+*.tmp

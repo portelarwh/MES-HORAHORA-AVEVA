@@ -57,6 +57,11 @@ A mesclagem é por carimbo de tempo: reimportar um período já carregado não d
 mostra quantos registros eram realmente novos, o que serve para conferir se a exportação trouxe o
 que se esperava.
 
+Carimbos repetidos e linhas fora de ordem não impedem a leitura: a série é ordenada antes do
+cálculo, o último valor prevalece em caso de empate, e as duas ocorrências são contadas no painel
+de **Qualidade dos dados** da análise. A série montada não é quebrada na meia-noite, então um
+incremento entre 23h59 e 00h01 é contabilizado normalmente.
+
 Não há limite prático de tamanho de janela. O armazenamento é IndexedDB, não `localStorage`.
 
 ## Quando o arquivo não entra

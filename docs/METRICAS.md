@@ -1,118 +1,50 @@
-# Métricas e critérios de cálculo
+# Métricas — visão rápida
 
-Todo indicador da ferramenta parte de duas coisas: os incrementos do contador e o tempo.
-Este documento fixa como cada um é apurado, para que o número possa ser defendido em reunião.
+Este arquivo é o resumo. As fórmulas completas, com exemplos que podem ser
+refeitos na mão, estão em **[calculos.md](calculos.md)**.
 
-## Da leitura bruta ao evento
+## O que a ferramenta mede
 
-O historian grava por mudança de valor. Cada par de registros consecutivos vira um **evento**:
-
-```
-evento = { instante, intervalo em segundos, incrementos }
-incrementos = valor[i] − valor[i−1]
-```
-
-Quando a diferença é negativa, houve reinício de lote. Nesse caso os incrementos passam a ser
-`valor[i] − offset`, onde o offset é o campo "contagem do lote inicia em" da máquina. Isso existe
-porque contadores que exibem a **próxima** unidade abrem o lote em 1 sem nada produzido.
-
-Eventos nunca cruzam a fronteira entre dois dias de importação. O silêncio entre o último registro
-de um dia e o primeiro do dia seguinte não é evento nem parada — é ausência de dados.
-
-`peças = incrementos × peças por incremento`, definido no cadastro da máquina.
-
-## As quatro medidas de tempo
-
-Elas se encaixam uma dentro da outra e aparecem nos cartões nessa ordem:
-
-| Medida | Definição |
-| --- | --- |
-| **Janela de dados** | Interseção do período analisado com os trechos efetivamente cobertos pela importação. Nunca é estimada. |
-| **Tempo disponível** | Janela de dados menos o abono lançado. É o denominador de tudo. |
-| **Tempo rodando** | Tempo disponível menos as paradas detectadas. |
-| **Duração do turno** | Horário cadastrado do turno. Só usada no fechamento. |
-
-Hora extra **não** entra em nenhuma delas. O tempo trabalhado a mais já está dentro da janela de
-dados, porque o contador registrou durante ele. Somá-la de novo contaria duas vezes. Ela aparece
-separada, para mostrar quanto da produção custou tempo pago além do turno.
-
-## Paradas
-
-Um intervalo entre eventos acima do limiar configurável — três minutos por padrão — vira parada.
-Ao ser distribuída pelos períodos, a parada é **recortada na virada**: uma interrupção que começa
-às 11h52 e termina às 12h11 lança 8 minutos na hora 11 e 11 minutos na hora 12.
-
-Parada aqui significa ausência de incremento. Pode ser máquina parada, pode ser cadência abaixo do
-limiar. Confronte com o apontamento do MES antes de tratar como perda de equipamento.
-
-## OEE
-
-```
-planejado = capacidade (peças/h) × tempo disponível (h)
-OEE       = produzido ÷ planejado
-```
-
-O cartão mostra a divisão escrita por extenso para conferência.
-
-**OEE parcial** troca o tempo disponível pela janela entre o primeiro registro e o último registro
-do período, também líquida de abono. Serve para turno em andamento: não pune por horas que ainda
-não aconteceram.
-
-**OEE fechado**, na tabela de turno, usa a duração cadastrada do turno menos abono. É o número
-oficial depois que o turno terminou.
-
-**OEE líquido** aparece quando há refugo ou retrabalho lançado, e troca o produzido pela produção
-boa. O OEE bruto continua medindo o que a máquina entregou.
-
-Esta é a definição de OEE adotada aqui: razão entre o produzido e o que a velocidade nominal
-entregaria no tempo disponível. Não é a decomposição clássica em disponibilidade × performance ×
-qualidade. Disponibilidade aparece como indicador próprio, e qualidade entra pelo OEE líquido.
-
-## Atingimento da meta
-
-```
-meta do período = meta (peças/h) × tempo disponível (h)
-atingimento     = produzido ÷ meta do período
-```
-
-Mesma estrutura do OEE, trocando capacidade por meta. Como o denominador é proporcional ao tempo
-coberto, períodos parciais são comparáveis sem ajuste manual.
-
-## Ritmo e cadência
-
-| Indicador | Fórmula | Para que serve |
+| Indicador | Fórmula | Observação |
 | --- | --- | --- |
-| Ritmo médio | peças ÷ janela de dados | O número real, por hora de relógio |
-| Ritmo sem paradas | peças ÷ tempo rodando | Leitura condicional, sempre rotulada |
-| Intervalo entre incrementos | janela ÷ incrementos | Cadência em segundos por caixa |
-| Melhor cadência sustentada | percentil 10 do tempo de ciclo | O que a máquina demonstrou conseguir |
+| Produção | incrementos × peças por incremento | incremento vem do cadastro da máquina |
+| Meta proporcional | meta (peças/h) × base ÷ 60 | acompanha a base escolhida |
+| Atingimento | peças ÷ meta proporcional | “—” quando a meta não está cadastrada |
+| OEE | peças ÷ (capacidade × base ÷ 60) | quatro leituras, uma por base |
+| Disponibilidade | tempo rodando ÷ tempo observado | |
+| Cobertura de dados | tempo com dados ÷ período | mede a confiança, não o desempenho |
+| Ritmo médio | peças ÷ tempo com dados (h) | |
+| Intervalo entre incrementos | tempo com dados (s) ÷ incrementos | segundos por caixa |
 
-O ritmo sem paradas é apresentado como apoio, nunca como indicador principal. Ele tem uma
-propriedade indesejada: quanto mais tempo sai do denominador por parada, maior fica o valor.
-Um número que melhora quando a operação piora não serve como métrica de acompanhamento.
+## As bases de cálculo
 
-Quando a melhor cadência sustentada supera a capacidade cadastrada, o diagnóstico avisa. Isso
-normalmente significa velocidade nominal desatualizada — e, enquanto não for revista, o OEE
-está otimista.
+Todo indicador que divide por tempo declara **contra o que** foi medido:
 
-## Produção de borda entre turnos
+| Base | Denominador | Responde a |
+| --- | --- | --- |
+| Período selecionado | período − abono | quanto entregou do que o relógio permitia |
+| Janela com dados | tempo com dados − abono | quanto entregou enquanto era observada |
+| Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |
+| Até o último registro | última marcação − início do período | como está indo até agora |
 
-Registros que caem fora do horário principal têm dois destinos, escolhidos no seletor da análise:
+## Parada não é ausência de dados
 
-- **Manter em cada turno cadastrado** — cada registro vai para o turno que cobre seu horário.
-- **Não usar o turno X — anexar ao turno seguinte** — o turno escolhido deixa de existir como
-  linha e sua janela é absorvida pelo turno cronologicamente seguinte.
+Dois limiares classificam cada intervalo entre registros:
 
-Caixas fechadas às 05h30 com o primeiro turno começando às 06h00: na primeira opção vão para o
-terceiro turno; na segunda entram no primeiro, sem virar hora extra. As linhas que receberam
-janela anexada são marcadas na tabela.
+- até o **limiar de parada** (3 min por padrão): máquina rodando;
+- entre os dois limiares: **parada detectada**;
+- acima do **limiar de ausência de dados** (30 min por padrão): **sem dados**.
 
-## Composição da perda
+Tempo sem dados fica fora do tempo observado e **nunca** é lançado como parada.
+Falta de informação é falta de informação.
 
-O diagnóstico separa o que faltou para a capacidade em duas parcelas:
+## Quando o indicador não pode ser calculado
 
-- **Perda por parada** — minutos parados convertidos pela velocidade nominal
-- **Perda por cadência** — diferença entre capacidade e ritmo, aplicada ao tempo rodando
+Aparece **“—”**, nunca 0%. Zero por cento significa que a conta foi feita e deu
+zero: houve tempo disponível e não houve produção.
 
-Elas respondem a perguntas diferentes. A primeira é resolvida com manutenção e setup; a segunda,
-com ajuste de processo. Saber qual é maior no período decide onde vale gastar esforço.
+## Onde a conta está implementada
+
+`src/js/40-metrics.js`, módulo puro sem acesso ao DOM, coberto por
+`tests/metrics.test.mjs`, `tests/turnos.test.mjs` e `tests/qualidade.test.mjs`.
+A tela lê o resultado e não refaz nenhuma conta.

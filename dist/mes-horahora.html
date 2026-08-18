@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v3.0.0 · build 2026-08-17 -->
+  <!-- MES Hora a Hora — AVEVA · v4.0.0 · build 2026-08-18 -->
   <title>MES Hora a Hora — AVEVA</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -238,6 +239,45 @@ footer{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);font-si
   .card,.kpi,.tblwrap,.dg{box-shadow:none;break-inside:avoid}
 }
 
+/* === 06-detalhe.css === */
+/* 06-detalhe.css — Linhas expansíveis, subtabela de registros, paginação
+   e ajustes de leitura das tabelas largas. */
+
+/* Nenhuma célula quebra no meio de um número ou de um par valor+unidade:
+   é o que evitava a leitura "concatenada" nas tabelas com muitas colunas. */
+.tblwrap td,.tblwrap th{white-space:nowrap}
+.tblwrap td:first-child{white-space:normal;min-width:150px}
+.tblwrap table{min-width:1040px}
+.pill+.pill,.pill+.tag,.tag+.tag{margin-left:5px}
+td .pill{white-space:nowrap}
+
+.pill.p-n{background:var(--card2);color:var(--tx3);border:1px solid var(--line)}
+.kpi.n .dot{background:var(--tx3)}
+.kpi.n .v{color:var(--tx2)}
+
+tr.exp{cursor:pointer}
+tr.exp:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+tr.exp .cx{display:inline-block;width:12px;color:var(--tx3);font-size:11px;transition:color .15s}
+tr.exp[aria-expanded="true"]{background:var(--accent-bg)}
+tr.exp[aria-expanded="true"] .cx{color:var(--accent)}
+tr.det>td{padding:0;background:var(--card2);border-bottom:1px solid var(--line)}
+tr.det:hover>td{background:var(--card2)}
+
+.subwrap{padding:12px 14px 14px;overflow-x:auto}
+.subtit{font-size:12.5px;color:var(--tx2);margin-bottom:9px;white-space:normal}
+table.sub{min-width:720px;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:8px}
+table.sub th{font-size:10.5px;padding:7px 10px}
+table.sub td{padding:6px 10px;font-size:12.8px}
+table.sub tbody tr:last-child td{border-bottom:0}
+
+.pagbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:11px}
+.pagbar .pginfo{font-size:12.5px;color:var(--tx3)}
+
+@media(max-width:620px){
+  .tblwrap td:first-child{min-width:120px}
+  .bar-tools .fld{min-width:130px}
+}
+
   </style>
 </head>
 <body>
@@ -269,27 +309,60 @@ footer{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);font-si
   <section>
     <div class="card">
       <div class="bar-tools">
-        <div class="fld"><label for="a_de">De</label><input type="date" id="a_de"></div>
-        <div class="fld"><label for="a_ate">Até</label><input type="date" id="a_ate"></div>
-        <div class="fld"><label for="a_gran">Agrupar por</label>
+        <div class="fld"><label for="a_de">De (data)</label><input type="date" id="a_de"></div>
+        <div class="fld" style="min-width:120px"><label for="a_hde">De (horário)</label><input type="time" id="a_hde" value="00:00"></div>
+        <div class="fld"><label for="a_ate">Até (data)</label><input type="date" id="a_ate"></div>
+        <div class="fld" style="min-width:120px"><label for="a_hate">Até (horário)</label><input type="time" id="a_hate" value="00:00"></div>
+        <button type="button" class="act pri" id="a_go">Atualizar</button>
+      </div>
+      <p class="note" style="margin-top:0;margin-bottom:14px">No campo <b>Até (horário)</b>, <b>00:00</b> significa
+        “até o fim do dia escolhido”. Qualquer outro horário corta o período exatamente ali, e todos os cálculos
+        passam a valer só para esse intervalo.</p>
+
+      <div class="sublbl">Filtros rápidos</div>
+      <div class="acts" style="margin-top:0;margin-bottom:16px" id="a_rapidos">
+        <button type="button" class="act" data-rap="turno">Turno atual</button>
+        <button type="button" class="act" data-rap="hoje">Hoje</button>
+        <button type="button" class="act" data-rap="ontem">Ontem</button>
+        <button type="button" class="act" data-rap="24h">Últimas 24 h</button>
+        <button type="button" class="act" data-rap="7d">Últimos 7 dias</button>
+        <button type="button" class="act" data-rap="mes">Este mês</button>
+      </div>
+
+      <div class="bar-tools">
+        <div class="fld" style="min-width:230px"><label for="a_base">Base do cálculo</label>
+          <select id="a_base"></select></div>
+        <div class="fld"><label for="a_gran">Agrupar o gráfico por</label>
           <select id="a_gran"><option value="hora">Hora</option><option value="turno">Turno</option><option value="dia">Dia</option></select></div>
         <div class="fld"><label for="a_tipo">Gráfico</label>
           <select id="a_tipo"><option value="auto">Automático</option><option value="barras">Barras</option><option value="linhas">Linhas</option></select></div>
         <div class="fld"><label for="a_lim">Parada acima de (min)</label><input type="number" id="a_lim" value="3" min="0.5" step="0.5"></div>
-        <div class="fld" style="min-width:270px"><label for="a_borda">Produção fora do horário principal</label>
+        <div class="fld"><label for="a_limsd">Sem dados acima de (min)</label><input type="number" id="a_limsd" value="30" min="1" step="1"></div>
+        <div class="fld" style="min-width:270px"><label for="a_borda">Turno desconsiderado</label>
           <select id="a_borda"></select></div>
-        <button type="button" class="act pri" id="a_go">Atualizar</button>
       </div>
+      <p class="note" id="a_basehelp" style="margin-top:0"></p>
+
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
       <div class="sublbl" style="margin-top:14px">Seções e camadas</div>
       <div class="opts" id="a_ops"></div>
-      <div class="sublbl" style="margin-top:16px">Relatórios</div>
+      <div class="sublbl" style="margin-top:16px">Relatórios e apresentação</div>
       <div class="acts" style="margin-top:0">
         <button type="button" class="act pri" id="r_a4">Relatório executivo A4</button>
         <button type="button" class="act" id="r_wa">Resumo para WhatsApp</button>
         <button type="button" class="act" id="r_em">Texto para e-mail</button>
+        <button type="button" class="act" id="a_cards">Escolher cartões</button>
+        <button type="button" class="act dgr" id="a_limpar">Limpar relatório</button>
       </div>
+      <div class="sublbl" style="margin-top:16px">Atualização automática</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <label class="opt" for="a_auto"><input type="checkbox" id="a_auto">Reler a base periodicamente</label>
+        <div class="fld" style="min-width:150px"><label for="a_autoseg">Intervalo (s)</label>
+          <input type="number" id="a_autoseg" value="120" min="30" step="30"></div>
+      </div>
+      <p class="note" id="a_autoinfo" style="margin-top:0">Desligada. Quando ligada, a mensagem diz se a base
+        realmente recebeu registros novos ou se a tela apenas foi recalculada.</p>
     </div>
   </section>
 
@@ -407,31 +480,32 @@ footer{margin-top:38px;padding-top:16px;border-top:1px solid var(--line);font-si
 <div id="toast"></div>
 <script>
 /* === 00-core.js === */
-/* 00-core.js — Estado global, utilitários, tema e navegação entre abas. */
+/* 00-core.js — Estado global, helpers de DOM, tema, navegação e rede de
+   segurança contra erro isolado. Formatação vive em 01-format.js. */
 "use strict";
 
 let MAQ=[],TUR=[],AJU=[],LAST=null,PRONTO=false;
 
 const $=i=>document.getElementById(i);
 const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
-const nf=n=>Math.round(n||0).toLocaleString('pt-BR');
-const nf1=n=>(n||0).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1});
-const nf2=n=>(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const pad2=n=>String(n).padStart(2,'0');
-const hhmm=d=>pad2(d.getHours())+':'+pad2(d.getMinutes());
-const iso=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
-const brDate=s=>s.split('-').reverse().join('/');
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const hm=s=>{const p=String(s||'0:0').split(':');return (+p[0])*60+(+p[1]);};
-const hDur=m=>Math.floor(m/60)+'h'+pad2(Math.round(m%60));
 const PAL=['#2A6FB0','#D97706','#1B8A5A','#8B4FBF','#C33C4E','#0E8F9E','#B0761F','#5D6BC0'];
-const pecas=m=>m.modo==='unidade'?1:(m.porInc||1);
-const cl=a=>a>=1?'g':a>=.85?'w':'r';
-const ovl=(a1,a2,b1,b2)=>Math.max(0,(Math.min(a2,b2)-Math.max(a1,b1))/60000);
 
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');
+function toast(m){const t=$('toast');if(!t)return;t.textContent=m;t.classList.add('on');
   clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),2800);}
+
+/* Um dado inválido em uma seção não pode derrubar a tela inteira: cada bloco
+   de render é embrulhado aqui e vira um aviso no lugar do bloco. */
+function protegido(nome,fn,aoFalhar){
+  try{return fn()}
+  catch(e){
+    console.error('[monitor] falha em '+nome,e);
+    toast('Não foi possível montar: '+nome);
+    if(typeof aoFalhar==='function')aoFalhar(e);
+    return null;
+  }
+}
 
 function setTema(t){
   document.documentElement.dataset.theme=t;
@@ -456,13 +530,191 @@ function mostrar(v){
 }
 document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>mostrar(b.dataset.v)));
 
+/* === 01-format.js === */
+/* 01-format.js — Formatação de números, datas, durações e a política de
+   "valor não calculável". Módulo puro: não toca no DOM, é carregado pelos testes.
+
+   Regra central do projeto: quando o denominador de um indicador não existe ou
+   é zero, o indicador não vale 0% — ele é NÃO CALCULÁVEL. Toda razão passa por
+   razao() e toda exibição de razão passa por fmtPct(), que devolve NAO_CALC. */
+"use strict";
+
+const NAO_CALC='—';
+const finito=v=>typeof v==='number'&&Number.isFinite(v);
+
+const nf=n=>finito(n)?Math.round(n).toLocaleString('pt-BR'):NAO_CALC;
+const nf1=n=>finito(n)?n.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}):NAO_CALC;
+const nf2=n=>finito(n)?n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):NAO_CALC;
+
+const pad2=n=>String(n).padStart(2,'0');
+const pad3=n=>String(n).padStart(3,'0');
+
+/* --- datas e horários --------------------------------------------------- */
+const hhmm=d=>pad2(d.getHours())+':'+pad2(d.getMinutes());
+const hhmmss=d=>hhmm(d)+':'+pad2(d.getSeconds());
+const iso=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+const brDate=s=>String(s).split('-').reverse().join('/');
+const ddmm=d=>pad2(d.getDate())+'/'+pad2(d.getMonth()+1);
+
+/* dtBR preserva a precisão do carimbo do historian: segundos sempre,
+   milissegundos quando existirem. Nada de horário arredondado ou inventado. */
+function dtBR(ms,prec){
+  if(!finito(ms))return NAO_CALC;
+  const d=new Date(ms);
+  if(isNaN(d.getTime()))return NAO_CALC;
+  let s=pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+hhmmss(d);
+  if(prec==='ms'||(prec!=='min'&&prec!=='s'&&d.getMilliseconds()))s+=','+pad3(d.getMilliseconds());
+  if(prec==='min')s=pad2(d.getDate())+'/'+pad2(d.getMonth()+1)+'/'+d.getFullYear()+' '+hhmm(d);
+  return s;
+}
+const dtCurto=ms=>finito(ms)?ddmm(new Date(ms))+' '+hhmmss(new Date(ms)):NAO_CALC;
+
+/* "HH:MM" -> minutos desde a meia-noite */
+const hm=s=>{const p=String(s||'0:0').split(':');const h=+p[0],m=+p[1];
+  return (Number.isFinite(h)?h:0)*60+(Number.isFinite(m)?m:0);};
+/* minutos desde a meia-noite -> "HH:MM" */
+const mh=m=>pad2(Math.floor(((m%1440)+1440)%1440/60))+':'+pad2(Math.round(((m%1440)+1440)%1440%60));
+
+/* --- durações ----------------------------------------------------------- */
+function hDur(min){
+  if(!finito(min))return NAO_CALC;
+  const neg=min<0,t=Math.abs(min);
+  return (neg?'-':'')+Math.floor(t/60)+'h'+pad2(Math.round(t%60));
+}
+const fmtMin=m=>finito(m)?nf1(m)+' min':NAO_CALC;
+const fmtSeg=s=>finito(s)?nf1(s)+' s':NAO_CALC;
+
+/* --- razões e percentuais ----------------------------------------------- */
+/* Devolve null — e não 0 — quando a conta não pode ser feita. */
+function razao(num,den){
+  if(!finito(num)||!finito(den)||den<=0)return null;
+  return num/den;
+}
+const fmtPct=(r,dec)=>r==null?NAO_CALC:(dec===0?nf(r*100):nf1(r*100))+'%';
+const pct=(num,den,dec)=>fmtPct(razao(num,den),dec);
+/* valor absoluto que pode não existir */
+const fmtVal=(v,f)=>v==null||!finito(v)?NAO_CALC:(f||nf)(v);
+
+/* Classe de cor por atingimento: g >= 100%, w >= 85%, r abaixo.
+   null (não calculável) fica neutro. */
+const cl=a=>a==null||!finito(a)?'n':a>=1?'g':a>=.85?'w':'r';
+
+if(typeof module!=='undefined'&&module.exports)module.exports={
+  NAO_CALC,finito,nf,nf1,nf2,pad2,pad3,hhmm,hhmmss,iso,brDate,ddmm,dtBR,dtCurto,
+  hm,mh,hDur,fmtMin,fmtSeg,razao,fmtPct,pct,fmtVal,cl};
+
+/* === 02-config.js === */
+/* 02-config.js — Preferências do usuário e catálogo do que pode ser exibido.
+
+   As preferências (cards visíveis, seções, base de cálculo, limiares) ficam no
+   localStorage, separadas dos dados de produção, que continuam no IndexedDB.
+   Trocar de preferência nunca toca em registro importado; apagar a base nunca
+   apaga preferência. */
+"use strict";
+
+const PREFS_KEY='hh-prefs';
+const PREFS_VER=1;
+
+/* Catálogo dos cards. [id, título, grupo, padrão]
+   grupo serve só para agrupar o seletor; a ordem aqui é a ordem na tela. */
+const CARDS=[
+  ['producao','Produção','Produção',1],
+  ['primeiro','Primeira marcação','Período',1],
+  ['ultimo','Última marcação','Período',1],
+  ['periodo','Período selecionado','Período',1],
+  ['dados','Tempo com dados','Período',1],
+  ['semdados','Tempo sem dados','Período',1],
+  ['meta','Meta proporcional','Desempenho',1],
+  ['oee','OEE da base escolhida','Desempenho',1],
+  ['oeeprog','OEE programado','Desempenho',0],
+  ['oeeobs','OEE observado','Desempenho',0],
+  ['oeeoper','OEE operacional','Desempenho',0],
+  ['oeeparcial','OEE parcial','Desempenho',1],
+  ['parado','Tempo parado','Paradas',1],
+  ['disp','Disponibilidade','Paradas',0],
+  ['ritmo','Ritmo médio','Cadência',1],
+  ['interv','Intervalo entre incrementos','Cadência',1],
+  ['qualidade','Qualidade dos dados','Dados',1],
+  ['abono','Abono e hora extra','Lançamentos',1],
+  ['refugo','Refugo e retrabalho','Lançamentos',1],
+  ['paradajust','Parada justificada','Lançamentos',1]
+];
+
+/* Seções da análise. [id, rótulo, padrão] */
+const OPCOES=[
+  ['meta','Linha de meta',1],['cap','Linha de capacidade',1],['rot','Rótulos no gráfico',1],
+  ['acum','Acumulado',0],['turno','Fechamento por turno',1],['hora','Detalhe por hora',1],
+  ['cad','Cadência',1],['registros','Registros individuais',0],['qual','Qualidade dos dados',1],
+  ['valid','Painel de validação',1],['dgn','Diagnóstico',1],['rastro','Rastreabilidade dos cálculos',1]
+];
+
+/* Bases de cálculo. O rótulo aparece nos cards e no relatório, para que o
+   número nunca fique sem dizer contra o que foi medido. */
+const BASES=[
+  ['programado','Período selecionado','duração do período menos abono'],
+  ['observado','Janela com dados','tempo coberto pelos registros menos abono'],
+  ['operacional','Tempo rodando','tempo com dados menos abono e menos paradas'],
+  ['parcial','Até o último registro','do início do período até a última marcação, menos abono']
+];
+const rotuloBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[1];
+const descBase=b=>(BASES.find(x=>x[0]===b)||BASES[0])[2];
+
+function prefsPadrao(){
+  const cards={},secoes={};
+  for(const [k,,,d] of CARDS)cards[k]=!!d;
+  for(const [k,,d] of OPCOES)secoes[k]=!!d;
+  return{v:PREFS_VER,cards,secoes,base:'programado',gran:'hora',tipo:'auto',
+    limParada:3,limSemDados:30,borda:'todos',auto:false,autoSeg:120,
+    hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
+}
+
+let PREFS=prefsPadrao();
+
+/* Mescla defensiva: preferência gravada por versão anterior nunca derruba a
+   aplicação, e chave nova ganha o padrão. */
+function mesclaPrefs(base,salvo){
+  if(!salvo||typeof salvo!=='object')return base;
+  const out={...base,...salvo};
+  out.v=PREFS_VER;
+  out.cards={...base.cards,...(salvo.cards||{})};
+  out.secoes={...base.secoes,...(salvo.secoes||{})};
+  for(const k of Object.keys(out.cards))if(!CARDS.some(c=>c[0]===k))delete out.cards[k];
+  for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
+  if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
+  if(!(out.limParada>0))out.limParada=base.limParada;
+  if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
+  if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
+  if(!(out.regPag>0))out.regPag=base.regPag;
+  return out;
+}
+function carregarPrefs(){
+  let salvo=null;
+  try{salvo=JSON.parse(localStorage.getItem(PREFS_KEY)||'null')}catch(e){salvo=null}
+  PREFS=mesclaPrefs(prefsPadrao(),salvo);
+  return PREFS;
+}
+function salvarPrefs(){
+  try{localStorage.setItem(PREFS_KEY,JSON.stringify(PREFS))}catch(e){/* modo privativo: segue sem persistir */}
+}
+const cardAtivo=k=>PREFS.cards[k]!==false;
+const secaoAtiva=k=>PREFS.secoes[k]!==false;
+
+if(typeof module!=='undefined'&&module.exports)module.exports={
+  CARDS,OPCOES,BASES,prefsPadrao,mesclaPrefs,rotuloBase,descBase};
+
 /* === 10-db.js === */
-/* 10-db.js — Camada IndexedDB e normalização dos registros de máquina. */
+/* 10-db.js — Camada IndexedDB e normalização dos registros de máquina.
+
+   Banco `monitor-hh`, versão 1 — inalterada nesta revisão. Nenhum store novo,
+   nenhuma mudança de keyPath: base e backup gerados por versões anteriores
+   continuam sendo lidos sem conversão. As preferências de tela ficam no
+   localStorage (02-config.js), fora do banco de produção. */
 "use strict";
 
 const DB={db:null};
+const DB_NOME='monitor-hh',DB_VER=1;
 function abrir(){return new Promise((res,rej)=>{
-  const r=indexedDB.open('monitor-hh',1);
+  const r=indexedDB.open(DB_NOME,DB_VER);
   r.onupgradeneeded=e=>{const d=e.target.result;
     ['maquinas','turnos','ajustes'].forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'})});
     if(!d.objectStoreNames.contains('dias'))d.createObjectStore('dias',{keyPath:'chave'});};
@@ -474,6 +726,14 @@ const put=(s,v)=>req(stx(s,'readwrite').put(v));
 const del=(s,k)=>req(stx(s,'readwrite').delete(k));
 const get1=(s,k)=>req(stx(s,'readonly').get(k));
 const clearS=s=>req(stx(s,'readwrite').clear());
+
+/* A chave de `dias` é "maquinaId|AAAA-MM-DD", então um intervalo de datas de
+   uma máquina é um range contíguo da chave primária. Lê só o que a análise
+   precisa, em vez de trazer a base inteira para a memória. */
+function diasDoIntervalo(maquinaId,de,ate){
+  const faixa=IDBKeyRange.bound(maquinaId+'|'+de,maquinaId+'|'+ate+'￿');
+  return req(stx('dias','readonly').getAll(faixa));
+}
 
 function normaliza(m){
   if(m.porInc===undefined){m.porInc=m.tubos||1;m.modo=(m.tubos&&m.tubos>1)?'lote':'unidade'}
@@ -524,6 +784,8 @@ function parseDate(s,fmt){const t=String(s).trim();
   const d=new Date(Y,mo-1,da,h,+m[5],+(m[6]||0),+((m[7]||'0').padEnd(3,'0')));
   return isNaN(d.getTime())?null:d;}
 
+if(typeof module!=='undefined'&&module.exports)module.exports={splitLine,parseCSV,toNum,detectFmt,parseDate};
+
 /* === 30-import.js === */
 /* 30-import.js — Fluxo de importação, escolha de máquina e mesclagem por dia. */
 "use strict";
@@ -535,6 +797,7 @@ async function importar(files){
   const log=$('i_log');log.innerHTML='';
   for(const f of files)await umArquivo(f,maq,log);
   await recarregar();montarAnalise();montarDados();
+  if(LAST)await rodarAnalise();          // a análise aberta passa a refletir o que entrou
 }
 function escolherMaquina(){return new Promise(res=>{
   $('dlg_t').textContent='De qual máquina é este arquivo?';
@@ -602,397 +865,1108 @@ dz.addEventListener('drop',e=>{const f=[...e.dataTransfer.files];if(f.length)imp
 $('file').addEventListener('change',e=>{const f=[...e.target.files];if(f.length)importar(f);e.target.value=''});
 
 /* === 40-metrics.js === */
-/* 40-metrics.js — Motor de métricas: janela, tempo disponível, OEE, turnos. */
+/* 40-metrics.js — Motor de cálculo. Módulo puro: nenhuma função aqui lê o DOM
+   nem o estado global da tela, todas recebem o que precisam por parâmetro.
+   É o módulo carregado pelos testes automatizados.
+
+   Conceitos de tempo, do maior para o menor:
+
+     período selecionado   fim − início do filtro (data + horário), exato
+     tempo com dados       parte do período coberta por registros do contador
+     tempo sem dados       período − tempo com dados (nunca vira parada)
+     tempo programado      período − abono          -> base "período selecionado"
+     tempo observado       tempo com dados − abono  -> base "janela com dados"
+     tempo operacional     observado − paradas      -> base "tempo rodando"
+     tempo parcial         início do período até a última marcação, − abono
+
+   Parada e ausência de dados são coisas diferentes e nunca se confundem:
+   o intervalo entre dois registros é classificado por dois limiares. */
 "use strict";
 
-async function carregarPontos(id,de,ate){
-  return (await getAll('dias')).filter(r=>r.maquinaId===id&&r.data>=de&&r.data<=ate)
-    .sort((a,b)=>a.data.localeCompare(b.data));
-}
-function analisarMaquina(maq,dias,limMin){
-  const ev=[],janelas=[],paradas=[];let resets=0,frac=0;
-  const limS=limMin*60;
-  for(const d of dias){
-    const pts=d.pts;if(pts.length<2)continue;
-    janelas.push({ini:pts[0][0],fim:pts[pts.length-1][0]});
-    for(const p of pts)if(!Number.isInteger(p[1]))frac++;
-    for(let i=1;i<pts.length;i++){
-      let dd=pts[i][1]-pts[i-1][1];
-      if(dd<0){resets++;dd=Math.max(0,pts[i][1]-(maq.offset||0))}
-      const gap=(pts[i][0]-pts[i-1][0])/1000;
-      ev.push({t:pts[i][0],t0:pts[i-1][0],gap,inc:dd});
-      if(gap>limS)paradas.push({ini:pts[i-1][0],fim:pts[i][0],min:gap/60});
-    }
+const pecas=m=>m.modo==='unidade'?1:(m.porInc||1);
+
+/* sobreposição de dois intervalos, em minutos */
+const ovl=(a1,a2,b1,b2)=>Math.max(0,(Math.min(a2,b2)-Math.max(a1,b1))/60000);
+
+/* --- segmentos: listas de {a,b} em ms, ordenadas e disjuntas ------------- */
+function unirSegs(segs){
+  const s=segs.filter(g=>g.b>g.a).sort((x,y)=>x.a-y.a),out=[];
+  for(const g of s){
+    const u=out[out.length-1];
+    if(u&&g.a<=u.b)u.b=Math.max(u.b,g.b);else out.push({a:g.a,b:g.b});
   }
-  const tcs=ev.filter(e=>e.inc>0).map(e=>e.gap/e.inc).sort((a,b)=>a-b);
-  const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
-  return{maq,ev,janelas,paradas:paradas.sort((a,b)=>b.min-a.min),resets,frac,
-    tcP10:q(.10),tcMed:q(.50),
-    primeiro:janelas.length?Math.min(...janelas.map(j=>j.ini)):0,
-    ultimo:janelas.length?Math.max(...janelas.map(j=>j.fim)):0};
+  return out;
 }
-function lancDe(id,a,b,pc){
-  const r={abono:0,extra:0,paradaJust:0,refugo:0,retrab:0,motivos:[]};
-  for(const j of AJU){
+function ovlSegs(segs,a,b){let s=0;for(const g of segs)s+=ovl(g.a,g.b,a,b);return s}
+function recortarSegs(segs,a,b){
+  return segs.map(g=>({...g,a:Math.max(g.a,a),b:Math.min(g.b,b)})).filter(g=>g.b>g.a);
+}
+/* complemento de segs dentro de [ini,fim) */
+function inverterSegs(segs,ini,fim){
+  const u=unirSegs(recortarSegs(segs,ini,fim)),out=[];let p=ini;
+  for(const g of u){if(g.a>p)out.push({a:p,b:g.a});p=Math.max(p,g.b)}
+  if(p<fim)out.push({a:p,b:fim});
+  return out;
+}
+
+/* --- classificação do intervalo entre dois registros --------------------- */
+const NORMAL='normal',PARADA='parada',SEMDADOS='semdados';
+function classificar(gapS,limParadaS,limSemDadosS){
+  if(gapS>limSemDadosS)return SEMDADOS;
+  if(gapS>limParadaS)return PARADA;
+  return NORMAL;
+}
+
+/* --- série contínua ------------------------------------------------------
+   Junta os dias importados numa única série ordenada. Ao contrário da versão
+   anterior, a série NÃO é quebrada na meia-noite: um incremento entre 23h59 e
+   00h01 deixa de ser perdido. A separação passa a ser feita pelos limiares,
+   que é o critério real — dia é só a chave de armazenamento. */
+function serieDePontos(dias){
+  const mapa=new Map();
+  let duplicados=0,foraDeOrdem=0,frac=0,anterior=-Infinity;
+  for(const d of dias)for(const p of d.pts){
+    const t=p[0],v=p[1];
+    if(!Number.isFinite(t)||!Number.isFinite(v))continue;
+    if(t<anterior)foraDeOrdem++;
+    anterior=t;
+    if(mapa.has(t)&&mapa.get(t)!==v)duplicados++;
+    else if(mapa.has(t))duplicados++;
+    if(!Number.isInteger(v))frac++;
+    mapa.set(t,v);
+  }
+  const pts=[...mapa.entries()].sort((a,b)=>a[0]-b[0]);
+  return{pts,duplicados,foraDeOrdem,frac};
+}
+
+/* --- análise de uma máquina dentro da janela exata ----------------------- */
+/* opts: {ini, fim, limParadaMin, limSemDadosMin, ajustes, base} */
+function analisarMaquina(maq,dias,opts){
+  const ini=opts.ini,fim=opts.fim;
+  const limParadaS=Math.max(0,opts.limParadaMin||0)*60;
+  const limSemDadosS=Math.max(limParadaS/60,opts.limSemDadosMin||0)*60;
+  const S=serieDePontos(dias),pts=S.pts,pc=pecas(maq);
+
+  const eventos=[],paradas=[],lacunas=[],cobertura=[];
+  let resets=0,semAlteracao=0,deltasMaiores=0,naoAtribuido=0,eventosNaoAtrib=0;
+
+  for(let i=1;i<pts.length;i++){
+    const t0=pts[i-1][0],t=pts[i][0],gapS=(t-t0)/1000;
+    const classe=classificar(gapS,limParadaS,limSemDadosS);
+    if(classe===SEMDADOS)lacunas.push({a:t0,b:t,origem:'lacuna'});
+    else cobertura.push({a:t0,b:t});
+    if(classe===PARADA)paradas.push({a:t0,b:t,min:gapS/60});
+
+    if(t<ini||t>=fim)continue;                     // fora da janela exata
+    let delta=pts[i][1]-pts[i-1][1],reset=false;
+    if(delta<0){reset=true;resets++;delta=Math.max(0,pts[i][1]-(maq.offset||0))}
+    if(delta===0)semAlteracao++;
+    if(delta>1)deltasMaiores++;
+    /* Um incremento só é atribuído ao período quando é possível dizer que ele
+       aconteceu dentro dele: intervalo com dados e começando dentro da janela
+       (ou curto o bastante para a borda ser irrelevante). O resto é reportado
+       como produção não atribuída, nunca espalhado em horários inventados. */
+    const contabiliza=classe!==SEMDADOS&&(t0>=ini||classe===NORMAL);
+    if(!contabiliza&&delta>0){naoAtribuido+=delta;eventosNaoAtrib++}
+    eventos.push({t,t0,gapS,delta,classe,reset,contabiliza,
+      pecas:contabiliza?delta*pc:0});
+  }
+
+  /* ausência de dados antes do primeiro e depois do último registro da série */
+  if(!pts.length)lacunas.push({a:ini,b:fim,origem:'vazio'});
+  else{
+    if(pts[0][0]>ini)lacunas.push({a:ini,b:Math.min(pts[0][0],fim),origem:'antes'});
+    if(pts[pts.length-1][0]<fim)lacunas.push({a:Math.max(pts[pts.length-1][0],ini),b:fim,origem:'depois'});
+  }
+
+  const cob=unirSegs(recortarSegs(cobertura,ini,fim));
+  const lac=inverterSegs(cob,ini,fim).map(g=>({...g,min:(g.b-g.a)/60000}));
+  const par=recortarSegs(paradas,ini,fim).map(g=>({...g,min:(g.b-g.a)/60000}));
+
+  const dentro=pts.filter(p=>p[0]>=ini&&p[0]<fim);
+  const tcs=eventos.filter(e=>e.contabiliza&&e.delta>0).map(e=>e.gapS/e.delta).sort((a,b)=>a-b);
+  const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
+
+  return{maq,pc,ini,fim,base:opts.base||'programado',
+    ajustes:opts.ajustes||[],pts,dentro,eventos,
+    cobertura:cob,lacunas:lac.sort((a,b)=>b.min-a.min),
+    paradas:par.sort((a,b)=>b.min-a.min),
+    origem:{duplicados:S.duplicados,foraDeOrdem:S.foraDeOrdem,frac:S.frac},
+    resets,semAlteracao,deltasMaiores,naoAtribuido,eventosNaoAtrib,
+    tcP10:q(.10),tcMed:q(.50),
+    primeiro:dentro.length?dentro[0][0]:null,
+    ultimo:dentro.length?dentro[dentro.length-1][0]:null,
+    limParadaMin:limParadaS/60,limSemDadosMin:limSemDadosS/60};
+}
+
+/* --- lançamentos manuais ------------------------------------------------- */
+function lancDe(ajustes,id,a,b,pc){
+  const r={abono:0,extra:0,paradaJust:0,refugo:0,retrab:0,motivos:[],abonoSegs:[]};
+  for(const j of ajustes||[]){
     if(j.maquinaId!==id&&j.maquinaId!=='*')continue;
-    const p=j.data.split('-');
+    const p=String(j.data||'').split('-');
+    if(p.length<3)continue;
     if(j.tipo==='refugo'||j.tipo==='retrabalho'){
-      const d0=new Date(+p[0],+p[1]-1,+p[2]).getTime();
-      if(d0>=a-86400000&&d0<b&&ovl(d0,d0+86400000,a,b)>0){
-        const qt=(j.un==='inc'?j.qtd*pc:j.qtd)*(ovl(d0,d0+86400000,a,b)/1440);
+      /* quantidade lançada por dia, rateada pela fatia do dia dentro do recorte */
+      const d0=new Date(+p[0],+p[1]-1,+p[2]).getTime(),d1=d0+86400000;
+      const o=ovl(d0,d1,a,b);
+      if(o>0){
+        const qt=(j.un==='inc'?(j.qtd||0)*pc:(j.qtd||0))*(o/1440);
         if(j.tipo==='refugo')r.refugo+=qt;else r.retrab+=qt;
       }
       continue;
     }
-    const hh=(j.inicio||'00:00').split(':');
-    const i0=new Date(+p[0],+p[1]-1,+p[2],+hh[0],+hh[1]).getTime();
-    const o=ovl(i0,i0+(j.minutos||0)*60000,a,b);
+    const hh=String(j.inicio||'00:00').split(':');
+    const i0=new Date(+p[0],+p[1]-1,+p[2],+hh[0]||0,+hh[1]||0).getTime();
+    const i1=i0+(j.minutos||0)*60000;
+    const o=ovl(i0,i1,a,b);
     if(o>0){
-      if(j.tipo==='abono')r.abono+=o;
+      if(j.tipo==='abono'){r.abono+=o;r.abonoSegs.push({a:Math.max(i0,a),b:Math.min(i1,b)})}
       else if(j.tipo==='extra')r.extra+=o;
       else if(j.tipo==='parada'){r.paradaJust+=o;if(j.obs)r.motivos.push(j.obs)}
     }
   }
+  r.abonoSegs=unirSegs(r.abonoSegs);
   return r;
 }
-function turnosNoIntervalo(ini,fim,excluirId){
+
+/* --- núcleo: métricas de um recorte [a,b) ------------------------------- */
+function metricas(A,a,b){
+  const c=A.maq,pc=A.pc;
+  let inc=0,regs=0,naoAtrib=0,semAlt=0,resets=0,ultimoReg=null,primeiroReg=null;
+  for(const e of A.eventos){
+    if(e.t<a||e.t>=b)continue;
+    if(e.contabiliza)inc+=e.delta;else if(e.delta>0)naoAtrib+=e.delta;
+    if(e.delta===0)semAlt++;
+    if(e.reset)resets++;
+  }
+  for(const p of A.dentro){
+    if(p[0]<a||p[0]>=b)continue;
+    regs++;
+    if(primeiroReg==null)primeiroReg=p[0];
+    ultimoReg=p[0];
+  }
+  const dur=(b-a)/60000;
+  const comDados=ovlSegs(A.cobertura,a,b);
+  const semDados=Math.max(0,dur-comDados);
+  const parado=ovlSegs(A.paradas,a,b);
+  const nPar=A.paradas.filter(p=>p.a>=a&&p.a<b).length;
+  const nLac=A.lacunas.filter(l=>l.a>=a&&l.a<b).length;
+
+  const L=lancDe(A.ajustes,c.id,a,b,pc);
+  const abono=L.abono;
+  const abonoCoberto=L.abonoSegs.reduce((s,g)=>s+ovlSegs(A.cobertura,g.a,g.b),0);
+
+  const programado=Math.max(0,dur-abono);
+  const observado=Math.max(0,comDados-abonoCoberto);
+  const operacional=Math.max(0,observado-parado);
+  let parcial=null;
+  if(ultimoReg!=null){
+    const abonoAte=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,a,ultimoReg),0);
+    parcial=Math.max(0,(ultimoReg-a)/60000-abonoAte);
+  }
+  const tempos={programado,observado,operacional,parcial};
+
+  const pcs=inc*pc;
+  const bom=Math.max(0,pcs-L.refugo-L.retrab);
+  const planCap={},planMeta={},oee={},ating={};
+  for(const k of Object.keys(tempos)){
+    const t=tempos[k];
+    planCap[k]=t==null?null:c.cap*(t/60);
+    planMeta[k]=t==null?null:c.meta*(t/60);
+    oee[k]=razao(pcs,planCap[k]);
+    ating[k]=razao(pcs,planMeta[k]);
+  }
+  const base=A.base||'programado';
+  return{a,b,dur,inc,regs,naoAtrib,semAlt,resets,nPar,nLac,
+    comDados,semDados,parado,abono,abonoCoberto,
+    extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
+    programado,observado,operacional,parcial,tempos,
+    primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
+    base,oeeBase:oee[base],atingBase:ating[base],
+    planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
+    oeeLiq:razao(bom,planCap[base]),
+    cobertura:razao(comDados,dur),
+    disp:razao(operacional,observado),
+    ritmo:razao(pcs,comDados/60),
+    ritmoOper:razao(pcs,operacional/60),
+    interv:razao(comDados*60,inc),
+    intervOper:razao(operacional*60,inc)};
+}
+
+/* --- turnos -------------------------------------------------------------- */
+/* Gera as ocorrências dos turnos que tocam [ini,fim), recortadas na janela.
+   Garante que nenhuma ocorrência se sobreponha a outra — sem isso o mesmo
+   registro entraria em dois turnos. Sobreposição de cadastro é sinalizada. */
+function turnosNoIntervalo(turnos,ini,fim,excluirId){
+  if(!turnos||!turnos.length)return[];
   const out=[];
-  let d=new Date(ini);d.setHours(0,0,0,0);d.setDate(d.getDate()-1);
-  for(let k=0;k<420&&d.getTime()<fim+86400000;k++){
-    for(const t of TUR){
+  const d=new Date(ini);d.setHours(0,0,0,0);d.setDate(d.getDate()-1);
+  const limite=fim+86400000,maxDias=800;
+  for(let k=0;k<maxDias&&d.getTime()<limite;k++){
+    for(const t of turnos){
       const a=new Date(d);a.setHours(0,0,0,0);a.setMinutes(hm(t.inicio));
       const dur=((hm(t.fim)-hm(t.inicio)+1440)%1440)||1440;
       out.push({a:a.getTime(),b:a.getTime()+dur*60000,rot:t.nome,turnoId:t.id,
-        dia:pad2(a.getDate())+'/'+pad2(a.getMonth()+1)});
+        durCadastrada:dur,dia:ddmm(a)});
     }
     d.setDate(d.getDate()+1);
   }
-  out.sort((x,y)=>x.a-y.a);
+  out.sort((x,y)=>x.a-y.a||x.b-y.b);
+  for(let i=0;i<out.length-1;i++){
+    if(out[i].b>out[i+1].a){out[i].b=out[i+1].a;out[i].sobreposto=true;out[i+1].sobreposto=true}
+  }
+  let lista=out.filter(x=>x.b>x.a);
   if(excluirId){
     const keep=[];
-    for(let i=0;i<out.length;i++){
-      if(out[i].turnoId!==excluirId){keep.push(out[i]);continue}
+    for(let i=0;i<lista.length;i++){
+      if(lista[i].turnoId!==excluirId){keep.push(lista[i]);continue}
       let j=i+1;
-      while(j<out.length&&out[j].turnoId===excluirId)j++;
-      if(j<out.length){out[j].a=Math.min(out[j].a,out[i].a);out[j].anexado=true}
-      else if(keep.length){keep[keep.length-1].b=Math.max(keep[keep.length-1].b,out[i].b);keep[keep.length-1].anexado=true}
+      while(j<lista.length&&lista[j].turnoId===excluirId)j++;
+      if(j<lista.length){lista[j].a=Math.min(lista[j].a,lista[i].a);lista[j].anexado=true}
+      else if(keep.length){const u=keep[keep.length-1];u.b=Math.max(u.b,lista[i].b);u.anexado=true}
+      i=j-1;
     }
-    return keep.filter(x=>x.b>ini&&x.a<fim);
+    lista=keep;
   }
-  return out.filter(x=>x.b>ini&&x.a<fim);
+  return lista.filter(x=>x.b>ini&&x.a<fim).map(x=>({...x,
+    aCheio:x.a,bCheio:x.b,
+    a:Math.max(x.a,ini),b:Math.min(x.b,fim),
+    recortado:x.a<ini||x.b>fim}));
 }
-function bucketsDe(gran,ini,fim,excluirId){
-  if(gran==='dia'){
-    const B=[];let d=new Date(ini);d.setHours(0,0,0,0);
-    while(d.getTime()<fim){const n=new Date(d);n.setDate(n.getDate()+1);
-      B.push({a:d.getTime(),b:n.getTime(),rot:pad2(d.getDate())+'/'+pad2(d.getMonth()+1)});d=n}
-    return B;
+
+/* --- recortes de período ------------------------------------------------- */
+/* Todo bucket é recortado na janela: um período que começa 07h20 gera um
+   primeiro bucket de 07h20 às 08h00, e não uma hora cheia inventada. */
+function bucketsDe(gran,ini,fim,turnos,excluirId){
+  if(gran==='turno')return turnosNoIntervalo(turnos,ini,fim,excluirId);
+  const B=[],passoDia=gran==='dia';
+  let a=ini;
+  while(a<fim){
+    const d=new Date(a),n=new Date(a);
+    if(passoDia){n.setHours(0,0,0,0);n.setDate(n.getDate()+1)}
+    else{n.setMinutes(0,0,0);n.setTime(n.getTime()+3600000)}
+    const b=Math.min(n.getTime(),fim);
+    B.push({a,b,rot:passoDia?ddmm(d):pad2(d.getHours())+'h',
+      dia:passoDia?null:ddmm(d),
+      parcial:(b-a)<(passoDia?86400000:3600000)});
+    a=b;
   }
-  if(gran==='turno'&&TUR.length) return turnosNoIntervalo(ini,fim,excluirId);
-  const B=[];let d=new Date(ini);d.setMinutes(0,0,0);
-  while(d.getTime()<fim){const n=new Date(d.getTime()+3600000);
-    B.push({a:d.getTime(),b:n.getTime(),rot:pad2(d.getHours())+'h',dia:pad2(d.getDate())+'/'+pad2(d.getMonth()+1)});d=n}
   return B;
 }
-/* núcleo: métricas de um recorte de tempo para uma máquina */
-function metricas(A,a,b){
-  const c=A.maq,pc=pecas(c);
-  let inc=0,ap=0,parauto=0,npar=0,cob=0,ultimo=0;
-  for(const e of A.ev)if(e.t>=a&&e.t<b){inc+=e.inc;ap++;if(e.t>ultimo)ultimo=e.t}
-  for(const j of A.janelas){cob+=ovl(j.ini,j.fim,a,b);
-    if(j.ini>=a&&j.ini<b&&!ap)ultimo=Math.max(ultimo,j.ini)}
-  for(const p of A.paradas){const o=ovl(p.ini,p.fim,a,b);if(o>0){parauto+=o;if(p.ini>=a&&p.ini<b)npar++}}
-  const L=lancDe(c.id,a,b,pc);
-  const janela=cob;                                  // tempo coberto pelos dados
-  const planej=Math.max(0,janela-L.abono);            // tempo disponível
-  const oper=Math.max(0,planej-parauto);              // tempo efetivamente rodando
-  const pcs=inc*pc;
-  const bom=Math.max(0,pcs-L.refugo-L.retrab);
-  const capH=c.cap,metaH=c.meta;
-  const planCap=capH*(planej/60);                     // planejado = velocidade x tempo disponível
-  const planMeta=metaH*(planej/60);
-  const parcialMin=ultimo?Math.max(0,(ultimo-Math.max(a,A.primeiro||a))/60000-L.abono):0;
-  const planParcial=capH*(parcialMin/60);
-  return{a,b,inc,ap,npar,janela,planej,oper,parauto,pcs,bom,
-    abono:L.abono,extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
-    ultimo,parcialMin,planCap,planMeta,
-    oee:planCap>0?pcs/planCap:0,
-    oeeParcial:planParcial>0?pcs/planParcial:0,
-    oeeLiq:planCap>0?bom/planCap:0,
-    ating:planMeta>0?pcs/planMeta:0,
-    ritmo:janela>0?pcs/(janela/60):0,
-    ritmoOper:oper>0?pcs/(oper/60):0,
-    disp:planej>0?oper/planej:0,
-    interv:inc>0?(janela*60)/inc:null,
-    intervOper:inc>0?(oper*60)/inc:null};
+
+if(typeof module!=='undefined'&&module.exports)module.exports={
+  pecas,ovl,unirSegs,ovlSegs,recortarSegs,inverterSegs,classificar,
+  NORMAL,PARADA,SEMDADOS,serieDePontos,analisarMaquina,lancDe,metricas,
+  turnosNoIntervalo,bucketsDe};
+
+/* === 41-quality.js === */
+/* 41-quality.js — Qualidade dos dados e painel de validação. Módulo puro.
+
+   A qualidade não julga a produção: julga o quanto dá para confiar nos números
+   apresentados. Um turno com OEE alto e cobertura de 40% é um turno sem dados,
+   não um turno bom. */
+"use strict";
+
+const QUAL_ROT={boa:'Boa',aceitavel:'Aceitável',ruim:'Ruim',sem:'Sem dados'};
+const QUAL_CLASSE={boa:'g',aceitavel:'w',ruim:'r',sem:'n'};
+
+function qualidade(A,t){
+  const o=A.origem||{duplicados:0,foraDeOrdem:0,frac:0};
+  const graves=(o.frac>0?1:0)+(o.foraDeOrdem>0?1:0)+(t.naoAtrib>0?1:0);
+  const cob=t.cobertura;                 // null quando o período tem duração zero
+  let classe;
+  if(!t.regs)classe='sem';
+  else if(cob!=null&&cob>=.98&&!graves)classe='boa';
+  else if(cob!=null&&cob>=.85&&graves<=1)classe='aceitavel';
+  else classe='ruim';
+  return{classe,rotulo:QUAL_ROT[classe],cor:QUAL_CLASSE[classe],cobertura:cob,
+    registros:t.regs,incrementos:t.inc,semAlteracao:t.semAlt,resets:t.resets,
+    naoAtribuido:t.naoAtrib,lacunas:t.nLac,minutosSemDados:t.semDados,
+    duplicados:o.duplicados,foraDeOrdem:o.foraDeOrdem,fracionados:o.frac,
+    deltasMaiores:A.deltasMaiores||0};
 }
-async function rodarAnalise(){
+
+/* Lista de validações do período. nivel: 'crit' | 'aten' | 'info' */
+function validacoes(A,t,ctx){
+  const V=[],c=A.maq,q=qualidade(A,t);
+  const add=(nivel,codigo,titulo,detalhe)=>V.push({nivel,codigo,titulo,detalhe,maquina:c.nome});
+
+  if(!t.regs)
+    add('crit','SEM-DADOS','Nenhum registro no período selecionado',
+      'A janela escolhida não tem marcação do contador. Nenhum indicador de produção é calculável.');
+  else if(q.cobertura!=null&&q.cobertura<.85)
+    add('crit','COBERTURA','Cobertura de dados em '+fmtPct(q.cobertura),
+      'Só '+hDur(t.comDados)+' das '+hDur(t.dur)+' do período têm registro. '
+      +'O tempo sem dados não foi contado como parada nem como produção.');
+  else if(q.cobertura!=null&&q.cobertura<.98)
+    add('aten','COBERTURA','Cobertura de dados em '+fmtPct(q.cobertura),
+      hDur(t.semDados)+' do período sem registro, em '+t.nLac+' lacuna(s).');
+
+  if(t.naoAtrib>0)
+    add('aten','NAO-ATRIBUIDO',nf(t.naoAtrib)+' incrementos não atribuídos',
+      'Vieram depois de uma lacuna ou de uma borda do período, sem como afirmar em que momento foram produzidos. '
+      +'Ficaram fora da produção contada, em vez de serem lançados num horário inventado.');
+
+  if(q.fracionados>0)
+    add('crit','FRACIONADO',nf(q.fracionados)+' registros com valor quebrado',
+      'O contador deveria ser sempre inteiro. Verifique se o historian está interpolando em modo analógico em vez de degrau.');
+
+  if(q.foraDeOrdem>0)
+    add('crit','ORDEM',nf(q.foraDeOrdem)+' carimbos fora de ordem no arquivo',
+      'A série foi reordenada por carimbo de tempo antes do cálculo, mas a exportação de origem está inconsistente.');
+
+  if(q.duplicados>0)
+    add('aten','DUPLICADO',nf(q.duplicados)+' carimbos repetidos',
+      'Carimbos iguais foram mesclados, prevalecendo o último valor lido. Reimportação do mesmo período não duplica produção.');
+
+  if(q.resets>0)
+    add('info','RESET',nf(q.resets)+' reinícios de contagem',
+      'O contador voltou para trás. O incremento passou a ser o valor lido menos o offset de '+nf(c.offset||0)+' da máquina.');
+
+  if(q.deltasMaiores>0)
+    add('info','DELTA','Incrementos maiores que 1 em '+nf(q.deltasMaiores)+' registros',
+      'Registrados no carimbo real em que apareceram. Nenhum horário intermediário foi criado para distribuí-los.');
+
+  if(!(c.cap>0))
+    add('crit','CAPACIDADE','Capacidade da máquina não cadastrada',
+      'Sem capacidade em peças/h não há OEE. O indicador aparece como não calculável.');
+  if(!(c.meta>0))
+    add('crit','META','Meta da máquina não cadastrada',
+      'Sem meta em peças/h não há atingimento. O indicador aparece como não calculável.');
+
+  if(A.tcP10&&c.cap>0){
+    const pico=3600/A.tcP10*A.pc;
+    if(pico>c.cap*1.02)
+      add('aten','PICO','Cadência de pico acima da capacidade cadastrada',
+        'A melhor cadência sustentada foi '+nf(pico)+' peças/h contra '+nf(c.cap)+' cadastradas. Enquanto isso não for revisto, o OEE fica otimista.');
+  }
+  if(A.limParadaMin>=A.limSemDadosMin)
+    add('aten','LIMIAR','Limiar de parada maior ou igual ao de ausência de dados',
+      'Com os dois limiares colados, toda parada longa é classificada como ausência de dados. Aumente o limiar de ausência.');
+
+  if(ctx&&ctx.turnosSobrepostos)
+    add('aten','TURNOS','Turnos cadastrados se sobrepõem',
+      'O fim de um turno passa do início do seguinte. As janelas foram recortadas para que nenhum registro entre em dois turnos.');
+  if(ctx&&ctx.semTurnos)
+    add('info','TURNOS','Nenhum turno cadastrado',
+      'O fechamento por turno fica indisponível até que ao menos um turno seja cadastrado.');
+  return V;
+}
+
+if(typeof module!=='undefined'&&module.exports)module.exports={qualidade,validacoes,QUAL_ROT,QUAL_CLASSE};
+
+/* === 45-analise.js === */
+/* 45-analise.js — Orquestração da análise: lê os filtros da tela, carrega os
+   dias necessários do IndexedDB, chama o motor puro de 40-metrics.js e guarda
+   o resultado em LAST. Nenhuma fórmula mora aqui. */
+"use strict";
+
+/* --- janela exata --------------------------------------------------------
+   ini = data De + horário De. fim = data Até + horário Até, com a convenção
+   de que 00:00 no campo Até significa "até o fim daquele dia". */
+function janelaSelecionada(){
   const de=$('a_de').value,ate=$('a_ate').value;
+  if(!de||!ate)return null;
+  const hDe=$('a_hde').value||'00:00',hAte=$('a_hate').value||'00:00';
+  const pd=de.split('-').map(Number),pa=ate.split('-').map(Number);
+  const ini=new Date(pd[0],pd[1]-1,pd[2],0,0,0,0).getTime()+hm(hDe)*60000;
+  let fim=new Date(pa[0],pa[1]-1,pa[2],0,0,0,0).getTime()+hm(hAte)*60000;
+  if(hm(hAte)===0)fim+=86400000;                 // 00:00 = fim do dia escolhido
+  return{ini,fim,de,ate,hDe,hAte,valida:fim>ini};
+}
+const isoDeMs=ms=>iso(new Date(ms));
+
+/* --- filtros rápidos ----------------------------------------------------- */
+function turnoAtual(agora){
+  if(!TUR.length)return null;
+  const oc=turnosNoIntervalo(TUR,agora-86400000,agora+86400000,null);
+  return oc.find(t=>t.aCheio<=agora&&agora<t.bCheio)||null;
+}
+function aplicarRapido(k){
+  const agora=new Date(),hoje=iso(agora);
+  const set=(d1,h1,d2,h2)=>{$('a_de').value=d1;$('a_hde').value=h1;$('a_ate').value=d2;$('a_hate').value=h2};
+  if(k==='hoje')set(hoje,'00:00',hoje,'00:00');
+  else if(k==='ontem'){const o=iso(new Date(agora.getTime()-86400000));set(o,'00:00',o,'00:00')}
+  else if(k==='24h'){const a=new Date(agora.getTime()-86400000);
+    set(iso(a),hhmm(a),hoje,hhmm(agora))}
+  else if(k==='7d'){const a=new Date(agora.getTime()-6*86400000);set(iso(a),'00:00',hoje,'00:00')}
+  else if(k==='mes'){const a=new Date(agora.getFullYear(),agora.getMonth(),1);set(iso(a),'00:00',hoje,'00:00')}
+  else if(k==='turno'){
+    const t=turnoAtual(agora.getTime());
+    if(!t){toast('Cadastre os turnos para usar esse filtro');return}
+    const a=new Date(t.aCheio);set(iso(a),hhmm(a),iso(agora),hhmm(agora));
+  }
+  guardarFiltros();rodarAnalise();
+}
+
+function guardarFiltros(){
+  PREFS.hDe=$('a_hde').value||'00:00';
+  PREFS.hAte=$('a_hate').value||'00:00';
+  PREFS.gran=$('a_gran').value;
+  PREFS.tipo=$('a_tipo').value;
+  PREFS.base=$('a_base').value;
+  PREFS.limParada=+$('a_lim').value||3;
+  PREFS.limSemDados=+$('a_limsd').value||30;
+  PREFS.borda=$('a_borda').value||'todos';
+  salvarPrefs();
+}
+
+/* --- estado da última análise ------------------------------------------- */
+let ASSINATURA='';
+const assinaturaDe=AS=>AS.map(A=>A.maq.id+':'+A.pts.length+':'+(A.pts.length?A.pts[A.pts.length-1][0]:0)).join('|');
+
+function statusTurno(bk,t,agora){
+  if(bk.bCheio>agora&&bk.aCheio<=agora)return{k:'andamento',rot:'Em andamento'};
+  if(bk.aCheio>agora)return{k:'futuro',rot:'Ainda não começou'};
+  if(!t.regs)return{k:'semdados',rot:'Sem dados'};
+  if(bk.recortado)return{k:'parcial',rot:'Recortado pelo filtro'};
+  return{k:'completo',rot:'Fechado'};
+}
+
+async function rodarAnalise(opts){
+  opts=opts||{};
+  const J=janelaSelecionada();
   const sel=[...document.querySelectorAll('#a_maqs input:checked')].map(i=>i.value);
-  if(!de||!ate||!sel.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';LAST=null;return}
-  const lim=+$('a_lim').value||3,gran=$('a_gran').value;
-  const bd=$('a_borda').value||'todos';
-  const excl=bd.startsWith('sem:')?bd.slice(4):null;
+  if(!J||!J.valida||!sel.length){
+    $('a_out').innerHTML='';$('a_vazio').style.display='block';LAST=null;
+    $('a_vazio').textContent=!J?'Escolha a data inicial e a data final.'
+      :!J.valida?'O fim do período precisa ser depois do início.'
+      :'Escolha ao menos uma máquina.';
+    return;
+  }
+  guardarFiltros();
+  const base=PREFS.base,gran=PREFS.gran;
+  const lim=PREFS.limParada,limSD=Math.max(PREFS.limParada,PREFS.limSemDados);
+  const excl=PREFS.borda.startsWith('sem:')?PREFS.borda.slice(4):null;
+  /* um dia de folga de cada lado para que o registro imediatamente anterior e
+     o posterior à janela classifiquem corretamente as bordas */
+  const deK=isoDeMs(J.ini-86400000),ateK=isoDeMs(J.fim+86400000);
+
   const AS=[];
   for(const id of sel){
     const m=MAQ.find(x=>x.id===id);if(!m)continue;
-    const dias=await carregarPontos(id,de,ate);if(!dias.length)continue;
-    AS.push(analisarMaquina(m,dias,lim));
+    let dias=[];
+    try{dias=await diasDoIntervalo(id,deK,ateK)}
+    catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
+    AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
+      limSemDadosMin:limSD,ajustes:AJU,base}));
   }
-  if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';LAST=null;
-    toast('Nenhum dado importado nesse período');return}
+  if(!AS.length){$('a_out').innerHTML='';$('a_vazio').style.display='block';
+    $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
   $('a_vazio').style.display='none';
-  const ini=Math.min(...AS.map(a=>a.primeiro)),fim=Math.max(...AS.map(a=>a.ultimo));
-  const B=bucketsDe(gran,ini,fim,excl);
-  const BT=TUR.length?turnosNoIntervalo(ini,fim,excl):[];
+
+  const BT=turnosNoIntervalo(TUR,J.ini,J.fim,excl);
+  const B=bucketsDe(gran,J.ini,J.fim,TUR,excl);
+  const BH=bucketsDe('hora',J.ini,J.fim);
+  const agora=Date.now();
+  const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length};
+
   for(const A of AS){
+    A.tot=metricas(A,J.ini,J.fim);
     A.linhas=B.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
-    A.turnos=BT.map(bk=>{
-      const m=metricas(A,bk.a,bk.b);
-      const durTurno=(bk.b-bk.a)/60000;
-      const planTurno=A.maq.cap*Math.max(0,durTurno-m.abono)/60;
-      return{bk,...m,durTurno,planTurno,oeeTurno:planTurno>0?m.pcs/planTurno:0};
-    }).filter(x=>x.janela>0||x.abono>0);
-    A.tot=metricas(A,ini,fim+1);
+    A.horas=BH.map(bk=>({bk,...metricas(A,bk.a,bk.b)}));
+    A.turnos=BT.map(bk=>{const m=metricas(A,bk.a,bk.b);
+      return{bk,...m,status:statusTurno(bk,m,agora)}});
+    A.qual=qualidade(A,A.tot);
+    A.valid=validacoes(A,A.tot,ctx);
   }
-  LAST={AS,B,BT,ini,fim,gran,lim,de,ate,excl};
-  renderAnalise();
+
+  const nova=assinaturaDe(AS),mudou=nova!==ASSINATURA;
+  ASSINATURA=nova;
+  LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,
+    ini:J.ini,fim:J.fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
+    geradoEm:new Date(),dadosMudaram:mudou};
+  protegido('a análise',renderAnalise,()=>{$('a_out').innerHTML=
+    '<div class="dg crit"><span class="lb">ERRO</span><div><div class="tt">A tela não pôde ser montada</div>'
+    +'<div class="bd">Os dados continuam guardados. Reduza o período ou desmarque seções e tente de novo.</div></div></div>'});
+  return mudou;
+}
+
+/* --- limpar relatório ----------------------------------------------------
+   Limpa só a tela. Nada é removido do IndexedDB — apagar a base é outro botão,
+   na aba Base de dados. */
+function limparRelatorio(){
+  LAST=null;ASSINATURA='';
+  $('a_out').innerHTML='';
+  $('relbox').classList.remove('on');
+  $('rel').innerHTML='';
+  $('a_vazio').style.display='block';
+  $('a_vazio').textContent='Relatório limpo. A base de dados continua intacta — clique em Atualizar para analisar de novo.';
+  toast('Relatório limpo — nenhum registro foi apagado');
+}
+
+/* --- atualização automática ---------------------------------------------
+   Distingue o que aconteceu: buscar dados novos é uma coisa, redesenhar a
+   mesma análise é outra. A mensagem nunca afirma o que não houve. */
+let AUTO_T=null;
+function pararAuto(){if(AUTO_T){clearInterval(AUTO_T);AUTO_T=null}}
+function ligarAuto(){
+  pararAuto();
+  const seg=Math.max(30,+$('a_autoseg').value||120);
+  PREFS.autoSeg=seg;PREFS.auto=true;salvarPrefs();
+  AUTO_T=setInterval(async()=>{
+    if(!LAST)return;
+    await recarregar();
+    const mudou=await rodarAnalise({silencioso:true});
+    $('a_autoinfo').textContent=(mudou?'Novos registros na base — análise refeita às '
+      :'Nada novo na base — apenas recalculado às ')+hhmm(new Date());
+  },seg*1000);
+  $('a_autoinfo').textContent='Verificando a base a cada '+seg+' s.';
 }
 
 /* === 50-render.js === */
-/* 50-render.js — Montagem dos cartões, tabelas e diagnóstico. */
+/* 50-render.js — Cartões, fechamento por turno, qualidade, validação,
+   diagnóstico e rastreabilidade. Só monta HTML a partir do que 40/41
+   calcularam: nenhuma fórmula é refeita aqui. */
 "use strict";
 
-const OPCOES=[['meta','Meta',1],['cap','Capacidade',1],['rot','Rótulos',1],['acum','Acumulado',0],
-  ['turno','Fechamento por turno',1],['cad','Cadência',1],['tab','Detalhe por período',1],['dgn','Diagnóstico',1]];
-const opAtivo=k=>{const i=document.querySelector('#a_ops input[value="'+k+'"]');return i?i.checked:false};
+const alvo=(r,a)=>r==null?null:r/a;
+const chip=A=>`<span class="tag"><span class="swatch" style="background:${A.maq.cor};margin-right:5px"></span>${esc(A.maq.nome)}</span>`;
+const nomeUnid=c=>c.modo==='unidade'?'incremento':c.unid;
+const plural=(n,u)=>nf(n)+' '+esc(u)+(n===1?'':'s');
 
+/* --- cartões ------------------------------------------------------------- */
+function cardsDe(A){
+  const c=A.maq,t=A.tot,q=A.qual,u=nomeUnid(c),bs=rotuloBase(t.base);
+  const eqInc=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(u)+' = '+nf(A.pc)+' peças';
+  const oeeCard=(id,tit,r,tempo,extra)=>[id,tit,fmtPct(r),
+    tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
+  const M={
+    producao:()=>['producao','Produção',nf(t.pcs)+' peças',plural(t.inc,u),'c',
+      eqInc+(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
+      'primeiro registro dentro do período','o',
+      t.primeiroReg==null?'nenhum registro na janela'
+        :'começou '+hDur((t.primeiroReg-t.a)/60000)+' depois do início do período'],
+    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg),
+      'último registro dentro do período','o',
+      t.ultimoReg==null?'nenhum registro na janela'
+        :'faltam '+hDur((t.b-t.ultimoReg)/60000)+' para o fim do período'],
+    periodo:()=>['periodo','Período selecionado',hDur(t.dur),
+      dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),'c','programado '+hDur(t.programado)+' (menos abono)'],
+    dados:()=>['dados','Tempo com dados',hDur(t.comDados),'cobertura '+fmtPct(t.cobertura),
+      cl(t.cobertura),'observado '+hDur(t.observado)+' · rodando '+hDur(t.operacional)],
+    semdados:()=>['semdados','Tempo sem dados',hDur(t.semDados),
+      t.nLac+' lacuna'+(t.nLac===1?'':'s')+' no período',t.semDados>0?'w':'g',
+      'não é parada: é ausência de registro e fica fora do denominador observado'],
+    meta:()=>['meta','Meta proporcional',fmtVal(t.planMetaBase)+' peças',
+      'atingimento '+fmtPct(t.atingBase),cl(t.atingBase),
+      nf(c.meta)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs],
+    oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
+      fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'),
+    oeeprog:()=>oeeCard('oeeprog','OEE programado',t.oee.programado,t.programado,'período selecionado menos abono'),
+    oeeobs:()=>oeeCard('oeeobs','OEE observado',t.oee.observado,t.observado,'só o tempo coberto por registros'),
+    oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
+    oeeparcial:()=>oeeCard('oeeparcial','OEE parcial',t.oee.parcial,t.parcial,
+      t.ultimoReg==null?'sem registro no período':'do início do período até '+dtBR(t.ultimoReg,'min')),
+    parado:()=>['parado','Tempo parado',fmtMin(t.parado),
+      t.nPar+' parada'+(t.nPar===1?'':'s')+' acima de '+nf1(A.limParadaMin)+' min',
+      cl(alvo(t.disp,1)),'disponibilidade '+fmtPct(t.disp)],
+    disp:()=>['disp','Disponibilidade',fmtPct(t.disp),'rodando ÷ observado',cl(t.disp),
+      hDur(t.operacional)+' de '+hDur(t.observado)],
+    ritmo:()=>['ritmo','Ritmo médio',fmtVal(t.ritmo),'peças/h na janela com dados',
+      cl(alvo(t.ritmo,c.meta)),'sem paradas '+fmtVal(t.ritmoOper)+' peças/h'],
+    interv:()=>['interv','Intervalo entre '+esc(u)+'s',fmtSeg(t.interv),
+      'média na janela com dados','c',
+      (t.intervOper!=null?'sem paradas '+fmtSeg(t.intervOper)+' · ':'')
+      +(A.tcP10!=null?'melhor sustentado '+fmtSeg(A.tcP10):'')],
+    qualidade:()=>['qualidade','Qualidade dos dados',q.rotulo,
+      'cobertura '+fmtPct(q.cobertura)+' · '+nf(q.registros)+' registros',q.cor,
+      [q.lacunas?q.lacunas+' lacuna(s)':'',q.resets?q.resets+' reset(s)':'',
+       q.fracionados?q.fracionados+' valor(es) quebrado(s)':'',
+       q.foraDeOrdem?q.foraDeOrdem+' fora de ordem':''].filter(Boolean).join(' · ')||'sem anomalia detectada'],
+    abono:()=>(t.abono>0||t.extra>0)?['abono','Abono / hora extra',
+      nf1(t.abono)+' / '+nf1(t.extra),'minutos','o',
+      (t.abono>0?'abono sai da meta e do planejado':'')
+      +(t.extra>0?(t.abono>0?' · ':'')+'extra ≈ '+fmtVal(t.ritmoOper==null?null:t.ritmoOper*t.extra/60)+' peças':'')]:null,
+    refugo:()=>(t.refugo>0||t.retrab>0)?['refugo','Refugo / retrabalho',
+      nf(t.refugo)+' / '+nf(t.retrab),'peças lançadas',cl(razao(t.bom,t.pcs)),
+      'produção boa '+nf(t.bom)+' · OEE líquido '+fmtPct(t.oeeLiq)]:null,
+    paradajust:()=>t.paradaJust>0?['paradajust','Parada justificada',fmtMin(t.paradaJust),
+      t.motivos.length?esc(t.motivos.slice(0,2).join(', ')):'sem motivo informado','o',
+      fmtPct(razao(t.paradaJust,t.parado))+' do tempo parado está justificado']:null
+  };
+  const out=[];
+  for(const [id] of CARDS){
+    if(!cardAtivo(id)||!M[id])continue;
+    const k=M[id]();if(k)out.push(k);
+  }
+  return out;
+}
 function cardsHTML(A){
-  const c=A.maq,t=A.tot,pc=pecas(c);
-  const unid=c.modo==='unidade'?'incremento':c.unid;
-  const eq=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(unid)+' = '+nf(pc)+' peças';
-  const K=[];
-  K.push(['Produção',nf(t.pcs)+' peças',nf(t.inc)+' '+esc(unid)+(t.inc===1?'':'s'),'c',eq]);
-  K.push(['Meta do período',nf(t.planMeta)+' peças',
-    'atingimento '+nf1(t.ating*100)+'% · '+(t.pcs>=t.planMeta?'+':'')+nf(t.pcs-t.planMeta),cl(t.ating),
-    nf(c.meta)+' peças/h × '+hDur(t.planej)+' disponíveis']);
-  K.push(['OEE do período',nf1(t.oee*100)+'%','produzido ÷ planejado',cl(t.oee/.85),
-    nf(t.pcs)+' ÷ '+nf(t.planCap)+' ('+nf(c.cap)+' peças/h × '+hDur(t.planej)+')']);
-  K.push(['OEE parcial',nf1(t.oeeParcial*100)+'%','até o último registro '+(t.ultimo?hhmm(new Date(t.ultimo)):'—'),
-    cl(t.oeeParcial/.85),'janela de '+hDur(t.parcialMin)+' desde o primeiro registro']);
-  K.push(['Janela de dados',hDur(t.janela),
-    (t.ultimo?hhmm(new Date(A.primeiro))+' às '+hhmm(new Date(A.ultimo)):'—'),'o',
-    'disponível '+hDur(t.planej)+' · rodando '+hDur(t.oper)]);
-  K.push(['Tempo parado',nf1(t.parauto)+' min',t.npar+' paradas acima do limiar',cl(1-t.parauto/Math.max(1,t.planej)),
-    'disponibilidade '+nf1(t.disp*100)+'%']);
-  K.push(['Intervalo entre '+esc(unid)+'s',t.interv?nf1(t.interv)+' s':'—',
-    'média na janela de dados','c',
-    (t.intervOper?'sem paradas '+nf1(t.intervOper)+' s · ':'')+(A.tcP10?'melhor sustentado '+nf1(A.tcP10)+' s':'')]);
-  K.push(['Ritmo médio',nf(t.ritmo),'peças/h na janela de dados',cl(t.ritmo/c.meta),
-    'sem paradas '+nf(t.ritmoOper)+' peças/h']);
-  if(t.abono>0||t.extra>0)
-    K.push(['Abono / hora extra',nf1(t.abono)+' / '+nf1(t.extra),'minutos','o',
-      (t.abono>0?'abono descontado da meta e do planejado':'')+(t.extra>0?(t.abono>0?' · ':'')+'extra ≈ '+nf(t.ritmoOper*t.extra/60)+' peças':'')]);
-  if(t.refugo>0||t.retrab>0)
-    K.push(['Refugo / retrabalho',nf(t.refugo)+' / '+nf(t.retrab),'peças lançadas',cl(t.bom/Math.max(1,t.pcs)),
-      'produção boa '+nf(t.bom)+' · OEE líquido '+nf1(t.oeeLiq*100)+'%']);
-  if(t.paradaJust>0)
-    K.push(['Parada justificada',nf1(t.paradaJust)+' min',
-      t.motivos.length?t.motivos.slice(0,2).join(', '):'sem motivo informado','o',
-      nf1(t.paradaJust/Math.max(1,t.parauto)*100)+'% do tempo parado está justificado']);
-  return K.map(([k,v,u,x,e])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div>`
+  const K=cardsDe(A);
+  if(!K.length)return '<div class="empty">Nenhum cartão selecionado. Use o botão “Escolher cartões”.</div>';
+  return K.map(([id,k,v,u,x,e])=>`<div class="kpi ${x}" data-card="${id}"><div class="k"><span class="dot"></span>${k}</div>`
     +`<div class="v">${v}</div><div class="u">${u}</div>${e?`<div class="eq">${e}</div>`:''}</div>`).join('');
 }
 
 function seta(atual,ant){
-  if(ant==null||ant===0)return '<span class="arw eq">—</span>';
+  if(ant==null||!Number.isFinite(ant)||ant===0)return '<span class="arw eq">'+NAO_CALC+'</span>';
   const d=(atual-ant)/ant*100;
   if(Math.abs(d)<1)return '<span class="arw eq">≈ 0%</span>';
   return `<span class="arw ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${nf1(Math.abs(d))}%</span>`;
 }
+const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
 
-function tabelaDetalhe(A){
-  const c=A.maq,unid=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
-  let h='<thead><tr>'
-    +'<th rowspan="2">Período</th><th rowspan="2">Regs</th>'
-    +'<th class="grp" colspan="2">Produção</th>'
-    +'<th class="grp" colspan="3">Desempenho</th>'
-    +'<th class="grp" colspan="3">Tempo (min)</th>'
-    +'<th class="grp" colspan="2">Cadência</th></tr><tr>'
-    +`<th class="sep">${unid}</th><th>Peças</th>`
-    +'<th class="sep">vs anterior</th><th>Meta</th><th>OEE</th>'
-    +'<th class="sep">Disponível</th><th>Parado</th><th>Abono</th>'
-    +'<th class="sep">Ritmo/h</th><th>Interv. (s)</th></tr></thead><tbody>';
-  const vis=A.linhas.filter(l=>l.janela>0||l.abono>0);
-  let ant=null;
-  for(const l of vis){
-    h+=`<tr><td>${(l.bk.dia&&LAST.gran!=='dia'?l.bk.dia+' ':'')+l.bk.rot}</td><td>${l.ap}</td>`
-      +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
-      +`<td class="sep">${seta(l.pcs,ant)}</td>`
-      +`<td><span class="pill p-${cl(l.ating)}">${nf1(l.ating*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.oee/.85)}">${nf1(l.oee*100)}%</span></td>`
-      +`<td class="sep">${nf1(l.planej)}</td><td>${l.parauto>0?nf1(l.parauto):'—'}</td><td>${l.abono>0?nf1(l.abono):'—'}</td>`
-      +`<td class="sep">${nf(l.ritmo)}</td><td>${l.interv?nf1(l.interv):'—'}</td></tr>`;
-    ant=l.pcs;
-  }
-  const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total</td><td>${nf(t.ap)}</td>`
-    +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td>`
-    +`<td class="sep">—</td><td>${nf1(t.ating*100)}%</td><td>${nf1(t.oee*100)}%</td>`
-    +`<td class="sep">${nf1(t.planej)}</td><td>${nf1(t.parauto)}</td><td>${nf1(t.abono)}</td>`
-    +`<td class="sep">${nf(t.ritmo)}</td><td>${t.interv?nf1(t.interv):'—'}</td></tr></tfoot>`;
-}
-
+/* --- fechamento por turno ------------------------------------------------ */
 function tabelaTurnos(A){
-  const c=A.maq,unid=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
+  const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Turno</th>'
+    +'<th rowspan="2">Turno</th><th rowspan="2">Status</th>'
     +'<th class="grp" colspan="2">Produção</th>'
-    +'<th class="grp" colspan="3">Horas trabalhadas</th>'
-    +'<th class="grp" colspan="2">Planejado (peças)</th>'
-    +'<th class="grp" colspan="2">OEE</th>'
-    +'<th rowspan="2">Meta</th></tr><tr>'
-    +`<th class="sep">${unid}</th><th>Peças</th>`
-    +'<th class="sep">Turno</th><th>Com dados</th><th>Parado</th>'
-    +'<th class="sep">Turno cheio</th><th>Até último reg.</th>'
-    +'<th class="sep">Fechado</th><th>Parcial</th></tr></thead><tbody>';
-  let T={inc:0,pcs:0,dur:0,jan:0,par:0,planT:0,planP:0,meta:0};
+    +'<th class="grp" colspan="4">Tempo (h)</th>'
+    +'<th class="grp" colspan="3">OEE</th>'
+    +'<th rowspan="2">Meta</th><th rowspan="2">Qualidade</th></tr><tr>'
+    +`<th class="sep">${u}</th><th>Peças</th>`
+    +'<th class="sep">No período</th><th>Com dados</th><th>Sem dados</th><th>Parado</th>'
+    +'<th class="sep">Programado</th><th>Observado</th><th>Parcial</th></tr></thead><tbody>';
+  const T={inc:0,pcs:0,dur:0,com:0,sem:0,par:0,pProg:0,pObs:0,mProg:0};
+  if(!A.turnos.length)h+='<tr><td colspan="12" style="text-align:center;color:var(--tx3)">Nenhum turno cobre o período selecionado.</td></tr>';
   for(const l of A.turnos){
-    const planP=c.cap*(l.parcialMin/60);
-    h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}${l.bk.anexado?' <span class="tag">+ borda</span>':''}</td>`
+    h+=`<tr><td>${l.bk.dia} · ${esc(l.bk.rot)}`
+      +`${l.bk.anexado?' <span class="tag">+ turno anexado</span>':''}`
+      +`${l.bk.recortado?' <span class="tag">recortado</span>':''}</td>`
+      +`<td style="text-align:left"><span class="pill p-${l.status.k==='completo'?'g':l.status.k==='semdados'?'r':'w'}">${l.status.rot}</span></td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
-      +`<td class="sep">${hDur(l.durTurno)}</td><td>${hDur(l.janela)}</td><td>${nf1(l.parauto)} min</td>`
-      +`<td class="sep">${nf(l.planTurno)}</td><td>${nf(planP)}</td>`
-      +`<td class="sep"><span class="pill p-${cl(l.oeeTurno/.85)}">${nf1(l.oeeTurno*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.oeeParcial/.85)}">${nf1(l.oeeParcial*100)}%</span></td>`
-      +`<td><span class="pill p-${cl(l.ating)}">${nf1(l.ating*100)}%</span></td></tr>`;
-    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.durTurno;T.jan+=l.janela;T.par+=l.parauto;
-    T.planT+=l.planTurno;T.planP+=planP;T.meta+=l.planMeta;
+      +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
+      +`<td class="sep">${pill(l.oee.programado,.85)}</td><td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td>${pill(l.atingBase)}</td>`
+      +`<td>${fmtPct(l.cobertura)}</td></tr>`;
+    T.inc+=l.inc;T.pcs+=l.pcs;T.dur+=l.dur;T.com+=l.comDados;T.sem+=l.semDados;T.par+=l.parado;
+    T.pProg+=l.planCap.programado||0;T.pObs+=l.planCap.observado||0;T.mProg+=l.planMetaBase||0;
   }
-  return h+`</tbody><tfoot><tr><td>Total geral</td>`
+  return h+`</tbody><tfoot><tr><td>Total geral</td><td></td>`
     +`<td class="sep">${nf(T.inc)}</td><td>${nf(T.pcs)}</td>`
-    +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.jan)}</td><td>${nf1(T.par)} min</td>`
-    +`<td class="sep">${nf(T.planT)}</td><td>${nf(T.planP)}</td>`
-    +`<td class="sep">${T.planT>0?nf1(T.pcs/T.planT*100):'—'}%</td>`
-    +`<td>${T.planP>0?nf1(T.pcs/T.planP*100):'—'}%</td>`
-    +`<td>${T.meta>0?nf1(T.pcs/T.meta*100):'—'}%</td></tr></tfoot>`;
+    +`<td class="sep">${hDur(T.dur)}</td><td>${hDur(T.com)}</td><td>${hDur(T.sem)}</td><td>${fmtMin(T.par)}</td>`
+    +`<td class="sep">${pct(T.pcs,T.pProg)}</td><td>${pct(T.pcs,T.pObs)}</td><td>${NAO_CALC}</td>`
+    +`<td>${pct(T.pcs,T.mProg)}</td><td>${pct(T.com,T.dur)}</td></tr></tfoot>`;
 }
 
-function chip(A){return `<span class="tag"><span class="swatch" style="background:${A.maq.cor};margin-right:5px"></span>${esc(A.maq.nome)}</span>`;}
+/* --- qualidade e validação ---------------------------------------------- */
+function painelQualidade(){
+  let h='<thead><tr><th>Máquina</th><th>Classificação</th><th>Cobertura</th><th>Registros</th>'
+    +'<th>Sem alteração</th><th>Deltas &gt; 1</th><th>Resets</th><th>Não atribuído</th>'
+    +'<th>Lacunas</th><th>Quebrados</th><th>Duplicados</th><th>Fora de ordem</th></tr></thead><tbody>';
+  for(const A of LAST.AS){
+    const q=A.qual;
+    h+=`<tr><td><span class="swatch" style="background:${A.maq.cor};margin-right:7px"></span>${esc(A.maq.nome)}</td>`
+      +`<td><span class="pill p-${q.cor==='n'?'w':q.cor}">${q.rotulo}</span></td>`
+      +`<td>${fmtPct(q.cobertura)}</td><td>${nf(q.registros)}</td><td>${nf(q.semAlteracao)}</td>`
+      +`<td>${nf(q.deltasMaiores)}</td><td>${nf(q.resets)}</td><td>${nf(q.naoAtribuido)}</td>`
+      +`<td>${nf(q.lacunas)} · ${hDur(q.minutosSemDados)}</td>`
+      +`<td>${nf(q.fracionados)}</td><td>${nf(q.duplicados)}</td><td>${nf(q.foraDeOrdem)}</td></tr>`;
+  }
+  return h+'</tbody>';
+}
+function painelValidacao(){
+  const V=LAST.AS.flatMap(A=>A.valid);
+  if(!V.length)return '<div class="dg ok"><span class="lb">OK</span><div><div class="tt">Nenhum problema encontrado</div>'
+    +'<div class="bd">Cobertura, cadastro e limiares estão consistentes no período analisado.</div></div></div>';
+  const ordem={crit:0,aten:1,info:2};
+  return V.slice().sort((a,b)=>ordem[a.nivel]-ordem[b.nivel]).map(v=>
+    `<div class="dg ${v.nivel}"><span class="lb">${esc(v.codigo)}</span><div>`
+    +`<div class="mq">${esc(v.maquina)}</div><div class="tt">${esc(v.titulo)}</div>`
+    +`<div class="bd">${esc(v.detalhe)}</div></div></div>`).join('');
+}
 
+/* --- rastreabilidade ----------------------------------------------------- */
+/* Mostra a conta com os números substituídos, para que qualquer indicador
+   possa ser refeito na mão em reunião. */
+function rastreabilidade(A){
+  const c=A.maq,t=A.tot,bs=rotuloBase(t.base);
+  const L=[
+    ['Peças produzidas','incrementos × peças por incremento',
+      nf(t.inc)+' × '+nf(A.pc),nf(t.pcs)+' peças'],
+    ['Período selecionado','fim − início',
+      dtBR(t.a,'min')+' → '+dtBR(t.b,'min'),hDur(t.dur)],
+    ['Tempo com dados','período − tempo sem dados',
+      hDur(t.dur)+' − '+hDur(t.semDados),hDur(t.comDados)],
+    ['Tempo programado','período − abono',
+      hDur(t.dur)+' − '+fmtMin(t.abono),hDur(t.programado)],
+    ['Tempo observado','tempo com dados − abono coberto',
+      hDur(t.comDados)+' − '+fmtMin(t.abonoCoberto),hDur(t.observado)],
+    ['Tempo operacional','observado − paradas detectadas',
+      hDur(t.observado)+' − '+fmtMin(t.parado),hDur(t.operacional)],
+    ['Tempo parcial','última marcação − início do período − abono',
+      t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.a,'min'),hDur(t.parcial)],
+    ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
+      nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
+    ['Atingimento','peças ÷ meta proporcional',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planMetaBase),fmtPct(t.atingBase)],
+    ['Planejado pela capacidade ('+bs+')','capacidade por hora × base ÷ 60',
+      nf(c.cap)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planCapBase)+' peças'],
+    ['OEE — '+bs,'peças ÷ planejado',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCapBase),fmtPct(t.oeeBase)],
+    ['OEE programado','peças ÷ (capacidade × programado ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.programado),fmtPct(t.oee.programado)],
+    ['OEE observado','peças ÷ (capacidade × observado ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.observado),fmtPct(t.oee.observado)],
+    ['OEE operacional','peças ÷ (capacidade × operacional ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.operacional),fmtPct(t.oee.operacional)],
+    ['OEE parcial','peças ÷ (capacidade × parcial ÷ 60)',
+      nf(t.pcs)+' ÷ '+fmtVal(t.planCap.parcial),fmtPct(t.oee.parcial)],
+    ['Disponibilidade','operacional ÷ observado',
+      hDur(t.operacional)+' ÷ '+hDur(t.observado),fmtPct(t.disp)],
+    ['Cobertura de dados','tempo com dados ÷ período',
+      hDur(t.comDados)+' ÷ '+hDur(t.dur),fmtPct(t.cobertura)],
+    ['Ritmo médio','peças ÷ tempo com dados em horas',
+      nf(t.pcs)+' ÷ '+nf2(t.comDados/60),fmtVal(t.ritmo)+' peças/h'],
+    ['Intervalo entre incrementos','tempo com dados em segundos ÷ incrementos',
+      nf(t.comDados*60)+' ÷ '+nf(t.inc),fmtSeg(t.interv)]
+  ];
+  return '<thead><tr><th>Indicador</th><th>Fórmula</th><th>Números usados</th><th>Resultado</th></tr></thead><tbody>'
+    +L.map(([a,b,c2,d])=>`<tr><td>${a}</td><td style="text-align:left;font-family:Inter,sans-serif">${b}</td>`
+      +`<td>${c2}</td><td><b>${d}</b></td></tr>`).join('')+'</tbody>';
+}
+
+/* --- diagnóstico --------------------------------------------------------- */
 function diagnosticos(){
   const {AS}=LAST,D=[];
   for(const A of AS){
-    const c=A.maq,t=A.tot,mq=chip(A);
-    D.push([t.ating>=1?'ok':t.ating>=.9?'aten':'crit','META',mq,
-      t.ating>=1?'Meta do período atingida':'Meta do período não atingida',
-      `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${nf(t.planMeta)}</b> planejadas pela meta — <b>${nf1(t.ating*100)}%</b>. `
-      +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.planej)} de tempo disponível`
+    const c=A.maq,t=A.tot,mq=chip(A),bs=rotuloBase(t.base);
+    if(!t.regs){
+      D.push(['crit','SEM DADOS',mq,'Nenhum registro no período',
+        'A janela selecionada não tem marcação do contador para esta máquina. Nada foi estimado no lugar.']);
+      continue;
+    }
+    D.push([t.atingBase==null?'info':t.atingBase>=1?'ok':t.atingBase>=.9?'aten':'crit','META',mq,
+      t.atingBase==null?'Atingimento não calculável':t.atingBase>=1?'Meta do período atingida':'Meta do período não atingida',
+      `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planMetaBase)}</b> da meta proporcional — <b>${fmtPct(t.atingBase)}</b>. `
+      +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.tempoBase)} (${esc(bs)})`
       +(t.abono>0?`, já líquidos de ${nf1(t.abono)} min de abono.`:'.')]);
-    D.push([t.oee>=.85?'ok':t.oee>=.7?'aten':'crit','OEE',mq,
-      `OEE de ${nf1(t.oee*100)}% no período`,
-      `<b>${nf(t.pcs)}</b> peças produzidas contra <b>${nf(t.planCap)}</b> planejadas pela capacidade `
-      +`(${nf(c.cap)} peças/h × ${hDur(t.planej)}). A diferença de <b>${nf(t.planCap-t.pcs)}</b> peças é o total a recuperar.`]);
-    const pd=t.parauto/60*c.cap,pv=Math.max(0,c.cap-t.ritmoOper)*(t.oper/60);
-    D.push([pv>pd?'crit':'aten','PERDA',mq,
-      pv>pd?'A maior perda é de cadência':'A maior perda é de parada',
-      `Paradas somaram <b>${nf1(t.parauto)}</b> min, equivalentes a <b>${nf(pd)}</b> peças na velocidade nominal. `
-      +`Rodando abaixo da capacidade a linha deixou <b>${nf(pv)}</b> peças, porque o ritmo com a máquina em operação foi `
-      +`<b>${nf(t.ritmoOper)}</b> contra os ${nf(c.cap)} peças/h de capacidade.`]);
+    D.push([t.oeeBase==null?'info':t.oeeBase>=.85?'ok':t.oeeBase>=.7?'aten':'crit','OEE',mq,
+      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`,
+      `<b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planCapBase)}</b> planejadas pela capacidade `
+      +`(${nf(c.cap)} peças/h × ${hDur(t.tempoBase)}). `
+      +(t.planCapBase!=null?`A diferença de <b>${nf(t.planCapBase-t.pcs)}</b> peças é o total a recuperar.`:'')]);
+    if(t.semDados>0)
+      D.push([t.cobertura!=null&&t.cobertura<.85?'crit':'aten','SEM DADOS',mq,
+        `${hDur(t.semDados)} do período sem registro`,
+        `A cobertura ficou em <b>${fmtPct(t.cobertura)}</b>, em ${t.nLac} lacuna(s). `
+        +'Esse tempo não entrou como parada nem como produção — o OEE observado ignora a lacuna, o programado não.']);
+    if(t.parado>0&&t.ritmoOper!=null){
+      const pd=t.parado/60*c.cap,pv=Math.max(0,c.cap-t.ritmoOper)*(t.operacional/60);
+      D.push([pv>pd?'crit':'aten','PERDA',mq,
+        pv>pd?'A maior perda é de cadência':'A maior perda é de parada',
+        `Paradas somaram <b>${nf1(t.parado)}</b> min, equivalentes a <b>${nf(pd)}</b> peças na velocidade nominal. `
+        +`Rodando abaixo da capacidade a linha deixou <b>${nf(pv)}</b> peças, porque o ritmo em operação foi `
+        +`<b>${nf(t.ritmoOper)}</b> contra os ${nf(c.cap)} peças/h de capacidade.`]);
+    }
     if(A.paradas.length){
       const top=A.paradas.slice(0,3);
       D.push([top[0].min>=10?'crit':'aten','PARADAS',mq,
-        `${A.paradas.length} interrupções somando ${nf1(t.parauto)} min`,
-        'As maiores foram '+top.map(p=>{const a=new Date(p.ini),b=new Date(p.fim);
-          return `<b>${pad2(a.getDate())}/${pad2(a.getMonth()+1)} ${hhmm(a)}→${hhmm(b)}</b> (${nf1(p.min)} min)`}).join(', ')
+        `${A.paradas.length} interrupções somando ${nf1(t.parado)} min`,
+        'As maiores foram '+top.map(p=>`<b>${dtCurto(p.a)} → ${dtCurto(p.b)}</b> (${nf1(p.min)} min)`).join(', ')
         +'. Compare com o apontamento do MES antes de tratar como perda de máquina.']);
     }
-    if(A.tcP10){
-      const pico=3600/A.tcP10*pecas(c);
-      if(pico>c.cap*1.02) D.push(['aten','CAPACIDADE',mq,'Cadência de pico acima do cadastro',
-        `A melhor cadência sustentada foi <b>${nf(pico)}</b> peças/h, acima dos ${nf(c.cap)} cadastrados. `
-        +'Enquanto isso não for revisto, o OEE fica otimista.']);
-    }
-    if(A.frac) D.push(['crit','DADOS',mq,`${A.frac} registros com valor quebrado`,
-      'O contador deveria ser sempre inteiro. Verifique se o historian está interpolando em modo analógico em vez de degrau.']);
+    if(A.qual.classe==='ruim')
+      D.push(['crit','QUALIDADE',mq,'Qualidade dos dados classificada como ruim',
+        'Os indicadores acima existem, mas não sustentam decisão sem antes corrigir a coleta. Veja o painel de validação.']);
   }
   if(AS.length>1){
-    const o=AS.slice().sort((a,b)=>b.tot.oee-a.tot.oee),a=o[0],z=o[o.length-1];
-    D.push(['info','COMPARAÇÃO','',`${esc(a.maq.nome)} lidera em OEE, ${esc(z.maq.nome)} fica atrás`,
-      `<b>${nf1(a.tot.oee*100)}%</b> contra <b>${nf1(z.tot.oee*100)}%</b>, com ritmo em operação de `
-      +`<b>${nf(a.tot.ritmoOper)}</b> e <b>${nf(z.tot.ritmoOper)}</b> peças/h. `
-      +`Se rodam o mesmo produto, os ${nf(Math.abs(a.tot.ritmoOper-z.tot.ritmoOper))} peças/h de diferença são o alvo mais barato do período.`]);
+    const com=AS.filter(a=>a.tot.oeeBase!=null);
+    if(com.length>1){
+      const o=com.slice().sort((a,b)=>b.tot.oeeBase-a.tot.oeeBase),a=o[0],z=o[o.length-1];
+      D.push(['info','COMPARAÇÃO','',`${esc(a.maq.nome)} lidera em OEE, ${esc(z.maq.nome)} fica atrás`,
+        `<b>${fmtPct(a.tot.oeeBase)}</b> contra <b>${fmtPct(z.tot.oeeBase)}</b>, com ritmo em operação de `
+        +`<b>${fmtVal(a.tot.ritmoOper)}</b> e <b>${fmtVal(z.tot.ritmoOper)}</b> peças/h.`]);
+    }
   }
   return D;
 }
 
+/* --- montagem da tela ---------------------------------------------------- */
+function secao(titulo,lede){
+  const s=el('section');
+  s.innerHTML='<h2>'+titulo+'</h2>'+(lede?'<p class="lede">'+lede+'</p>':'');
+  return s;
+}
 function renderAnalise(){
   const {AS}=LAST,out=$('a_out');out.innerHTML='';
-  const s1=el('section');
-  s1.innerHTML='<h2>Resumo do período</h2><p class="lede">'+brDate(LAST.de)+' a '+brDate(LAST.ate)
-    +' · agrupado por '+LAST.gran+' · paradas acima de '+nf1(LAST.lim)+' min</p>';
+
+  const s1=secao('Resumo do período',
+    dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
+    +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
+    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min');
   for(const A of AS){
     const c=A.maq,h=el('div');
     h.innerHTML=`<h2 style="margin:16px 0 10px"><span class="swatch" style="background:${c.cor}"></span>${esc(c.nome)}`
       +`<span class="tag">${c.modo==='unidade'?'1 peça por incremento':nf(c.porInc)+' peças por '+esc(c.unid)}</span>`
-      +`<span class="tag">capacidade ${nf(c.cap)} peças/h</span></h2>`;
+      +`<span class="tag">capacidade ${nf(c.cap)} peças/h</span>`
+      +`<span class="tag">meta ${nf(c.meta)} peças/h</span>`
+      +`<span class="pill p-${A.qual.cor==='n'?'w':A.qual.cor}">dados: ${A.qual.rotulo}</span></h2>`;
     const g=el('div','kpis');g.innerHTML=cardsHTML(A);h.appendChild(g);s1.appendChild(h);
   }
   out.appendChild(s1);
 
-  if(opAtivo('turno')&&LAST.BT.length){
+  if(secaoAtiva('turno')){
     for(const A of AS){
-      const s=el('section');
-      s.innerHTML=`<h2><span class="swatch" style="background:${A.maq.cor}"></span>Fechamento por turno — ${esc(A.maq.nome)}</h2>`
-        +`<p class="lede">OEE fechado usa a duração cadastrada do turno. OEE parcial usa a janela até o último registro — serve para turno em andamento.`
-        +(LAST.excl?' A produção do turno excluído foi anexada ao turno seguinte.':'')+`</p>`;
-      const w=el('div','tblwrap');w.innerHTML=tabelaTurnos(A);s.appendChild(w);out.appendChild(s);
+      const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Fechamento por turno — ${esc(A.maq.nome)}`,
+        'Uma linha por ocorrência de turno dentro do período. As janelas são recortadas no filtro e nunca se sobrepõem, '
+        +'então nenhum registro entra em dois turnos.'
+        +(LAST.excl?' A janela do turno desconsiderado foi anexada ao turno seguinte.':''));
+      const w=el('div','tblwrap');w.innerHTML='<table>'+tabelaTurnos(A)+'</table>';s.appendChild(w);out.appendChild(s);
     }
   }
 
-  const s2=el('section');
-  s2.innerHTML='<h2>'+(opAtivo('acum')?'Produção acumulada':'Produção por '+LAST.gran)+'</h2>'
-    +'<p class="lede">Todas as máquinas na mesma linha do tempo.</p>';
+  const s2=secao(secaoAtiva('acum')?'Produção acumulada':'Produção por '+LAST.gran,
+    'Todas as máquinas na mesma linha do tempo.');
   const c2=el('div','card'),lg=el('div');
   lg.style.cssText='display:flex;flex-wrap:wrap;gap:15px;font-size:13px;color:var(--tx2);margin-bottom:13px';
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
-    +(opAtivo('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
-    +(opAtivo('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
+    +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
+    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 
-  if(opAtivo('cad')){
-    const s3=el('section');
-    s3.innerHTML='<h2>Cadência</h2><p class="lede">Cada traço é um registro do contador; a altura acompanha o tamanho do incremento. '
-      +'Blocos vermelhos são paradas, faixas cinza no topo são os turnos. Períodos sem dados são comprimidos.</p>';
+  if(secaoAtiva('cad')){
+    const s3=secao('Cadência',
+      'Cada traço é um registro do contador; a altura acompanha o tamanho do incremento. '
+      +'Blocos vermelhos são paradas, hachura cinza é ausência de dados, faixas no topo são os turnos.');
     const c3=el('div','card'),b3=el('div','cvbox');
     b3.innerHTML='<canvas id="tl" height="'+(52*AS.length+58)+'"></canvas>';
     c3.appendChild(b3);s3.appendChild(c3);out.appendChild(s3);
   }
-  if(opAtivo('tab')){
-    for(const A of AS){
-      const s=el('section');
-      s.innerHTML=`<h2><span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por ${LAST.gran} — ${esc(A.maq.nome)}</h2>`
-        +`<p class="lede">A coluna "vs anterior" compara as peças com o período imediatamente acima.</p>`;
-      const w=el('div','tblwrap');w.innerHTML=tabelaDetalhe(A);s.appendChild(w);out.appendChild(s);
-    }
-    const ac=el('div','acts');
-    ac.innerHTML='<button type="button" class="act" id="b_csv">Baixar CSV</button>';
-    out.appendChild(ac);
-    ac.querySelector('#b_csv').addEventListener('click',expCSV);
+
+  if(secaoAtiva('hora'))protegido('o detalhe por hora',()=>secaoHoras(out));
+  if(secaoAtiva('registros'))protegido('os registros individuais',()=>secaoRegistros(out));
+
+  if(secaoAtiva('qual')){
+    const s=secao('Qualidade dos dados',
+      'Mede a confiança nos números acima, não o desempenho da máquina.');
+    const w=el('div','tblwrap');w.innerHTML='<table>'+painelQualidade()+'</table>';s.appendChild(w);out.appendChild(s);
   }
-  if(opAtivo('dgn')){
-    const s=el('section');s.innerHTML='<h2>Diagnóstico</h2>';
+  if(secaoAtiva('valid')){
+    const s=secao('Painel de validação','O que precisa ser conferido antes de usar o número.');
+    const d=el('div');d.innerHTML=painelValidacao();s.appendChild(d);out.appendChild(s);
+  }
+  if(secaoAtiva('dgn')){
+    const s=secao('Diagnóstico','');
     const d=el('div');
     d.innerHTML=diagnosticos().map(x=>`<div class="dg ${x[0]}"><span class="lb">${x[1]}</span>`
       +`<div>${x[2]?`<div class="mq">${x[2]}</div>`:''}<div class="tt">${x[3]}</div><div class="bd">${x[4]}</div></div></div>`).join('');
     s.appendChild(d);out.appendChild(s);
   }
+  if(secaoAtiva('rastro')){
+    for(const A of AS){
+      const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Rastreabilidade — ${esc(A.maq.nome)}`,
+        'Cada indicador do período com a fórmula e os números que entraram nela.');
+      const w=el('div','tblwrap');w.innerHTML='<table>'+rastreabilidade(A)+'</table>';s.appendChild(w);out.appendChild(s);
+    }
+  }
+
+  const ac=el('div','acts');
+  ac.innerHTML='<button type="button" class="act" data-exp="periodo">CSV do período</button>'
+    +'<button type="button" class="act" data-exp="turno">CSV por turno</button>'
+    +'<button type="button" class="act" data-exp="hora">CSV por hora</button>'
+    +'<button type="button" class="act" data-exp="registros">CSV dos registros</button>'
+    +'<button type="button" class="act" data-exp="paradas">CSV de paradas e lacunas</button>';
+  ac.querySelectorAll('button[data-exp]').forEach(b=>b.addEventListener('click',()=>exportarCSV(b.dataset.exp)));
+  out.appendChild(ac);
+
   requestAnimationFrame(desenhar);
 }
 
+/* === 51-registros.js === */
+/* 51-registros.js — Detalhe por hora com expansão e lista dos registros
+   individuais do contador (cada caixa, com o carimbo real do historian).
+
+   Nenhum horário é gerado aqui. Um incremento de 5 aparece como um registro
+   só, no instante em que o historian o gravou — nunca como cinco registros
+   espalhados em horários inventados. */
+"use strict";
+
+const CLS_REG={
+  producao:['Produção','g'],semalteracao:['Sem alteração','n'],reset:['Reset','w'],
+  multiplo:['Incremento múltiplo','w'],parada:['Após parada','w'],lacuna:['Após lacuna','r'],
+  inicial:['Primeiro do período','n']
+};
+const FILTROS_REG=[['todos','Todos'],['producao','Só com produção'],['semalteracao','Só sem alteração'],
+  ['reset','Só resets'],['multiplo','Só incrementos > 1'],['parada','Após parada'],['lacuna','Após lacuna']];
+
+/* Um registro pode carregar mais de uma marca; a primeira define o filtro. */
+function marcasDoRegistro(r){
+  const m=[];
+  if(!r.ev)m.push('inicial');
+  else{
+    if(r.ev.reset)m.push('reset');
+    if(r.ev.classe===SEMDADOS)m.push('lacuna');
+    else if(r.ev.classe===PARADA)m.push('parada');
+    if(r.ev.delta===0)m.push('semalteracao');
+    else if(r.ev.delta>1)m.push('multiplo');
+    else m.push('producao');
+  }
+  return m;
+}
+function registrosDe(A,a,b){
+  const mp=new Map(A.eventos.map(e=>[e.t,e]));
+  const out=[];
+  for(const p of A.dentro){
+    if(a!=null&&(p[0]<a||p[0]>=b))continue;
+    const r={t:p[0],valor:p[1],ev:mp.get(p[0])||null};
+    r.marcas=marcasDoRegistro(r);
+    out.push(r);
+  }
+  return out;
+}
+const filtraRegistros=(L,f)=>f==='todos'?L:L.filter(r=>r.marcas.includes(f));
+
+function linhasRegistros(A,L){
+  return L.map(r=>{
+    const e=r.ev;
+    const tags=r.marcas.map(m=>`<span class="pill p-${CLS_REG[m][1]}">${CLS_REG[m][0]}</span>`).join(' ');
+    return `<tr><td>${dtBR(r.t)}</td><td>${nf(r.valor)}</td>`
+      +`<td>${e?nf(e.delta):NAO_CALC}</td>`
+      +`<td>${e?nf(e.contabiliza?e.delta*A.pc:0):NAO_CALC}</td>`
+      +`<td>${e?fmtSeg(e.gapS):NAO_CALC}</td>`
+      +`<td style="text-align:left;font-family:Inter,sans-serif">${tags}</td>`
+      +`<td>${e?(e.contabiliza?'sim':'não'):'—'}</td></tr>`;
+  }).join('');
+}
+const CAB_REG='<thead><tr><th>Data e hora do registro</th><th>Contador</th><th>Δ</th><th>Peças</th>'
+  +'<th>Intervalo</th><th>Classificação</th><th>Contabilizado</th></tr></thead>';
+
+/* --- detalhe por hora ---------------------------------------------------- */
+function tabelaHoras(A,linhas){
+  const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
+  let h='<thead><tr>'
+    +'<th rowspan="2">Hora</th><th rowspan="2">Regs</th>'
+    +'<th class="grp" colspan="3">Produção</th>'
+    +'<th class="grp" colspan="2">Desempenho</th>'
+    +'<th class="grp" colspan="4">Tempo (min)</th>'
+    +'<th class="grp" colspan="2">Cadência</th></tr><tr>'
+    +`<th class="sep">${u}</th><th>Peças</th><th>vs anterior</th>`
+    +'<th class="sep">Meta</th><th>OEE</th>'
+    +'<th class="sep">Com dados</th><th>Sem dados</th><th>Parado</th><th>Abono</th>'
+    +'<th class="sep">Ritmo/h</th><th>Interv. (s)</th></tr></thead><tbody>';
+  let ant=null;
+  for(const l of linhas){
+    const rot=(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot
+      +(l.bk.parcial?` <span class="tag">${hhmm(new Date(l.a))}–${hhmm(new Date(l.b))}</span>`:'');
+    h+=`<tr class="exp" data-a="${l.a}" data-b="${l.b}" tabindex="0" role="button" aria-expanded="false">`
+      +`<td><span class="cx">▸</span> ${rot}</td><td>${nf(l.regs)}</td>`
+      +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
+      +`<td>${seta(l.pcs,ant)}</td>`
+      +`<td class="sep">${pill(l.atingBase)}</td><td>${pill(l.oeeBase,.85)}</td>`
+      +`<td class="sep">${nf1(l.comDados)}</td><td>${l.semDados>0?nf1(l.semDados):'—'}</td>`
+      +`<td>${l.parado>0?nf1(l.parado):'—'}</td><td>${l.abono>0?nf1(l.abono):'—'}</td>`
+      +`<td class="sep">${fmtVal(l.ritmo)}</td><td>${fmtSeg(l.interv)}</td></tr>`;
+    ant=l.pcs;
+  }
+  const t=A.tot;
+  return h+`</tbody><tfoot><tr><td>Total do período</td><td>${nf(t.regs)}</td>`
+    +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td><td>${NAO_CALC}</td>`
+    +`<td class="sep">${fmtPct(t.atingBase)}</td><td>${fmtPct(t.oeeBase)}</td>`
+    +`<td class="sep">${nf1(t.comDados)}</td><td>${nf1(t.semDados)}</td>`
+    +`<td>${nf1(t.parado)}</td><td>${nf1(t.abono)}</td>`
+    +`<td class="sep">${fmtVal(t.ritmo)}</td><td>${fmtSeg(t.interv)}</td></tr></tfoot>`;
+}
+
+/* Expansão: mostra apenas os registros dentro da janela daquela linha. */
+function ligarExpansao(tbl,A){
+  tbl.addEventListener('click',e=>{
+    const tr=e.target.closest('tr.exp');if(!tr||!tbl.contains(tr))return;
+    alternarExpansao(tr,A);
+  });
+  tbl.addEventListener('keydown',e=>{
+    if(e.key!=='Enter'&&e.key!==' ')return;
+    const tr=e.target.closest('tr.exp');if(!tr)return;
+    e.preventDefault();alternarExpansao(tr,A);
+  });
+}
+function alternarExpansao(tr,A){
+  const aberto=tr.getAttribute('aria-expanded')==='true';
+  const prox=tr.nextElementSibling;
+  if(aberto){
+    if(prox&&prox.classList.contains('det'))prox.remove();
+    tr.setAttribute('aria-expanded','false');
+    tr.querySelector('.cx').textContent='▸';
+    return;
+  }
+  const a=+tr.dataset.a,b=+tr.dataset.b;
+  const L=registrosDe(A,a,b);
+  const td=el('td');
+  td.colSpan=tr.children.length;
+  td.innerHTML=L.length
+    ?`<div class="subwrap"><div class="subtit">${nf(L.length)} registro(s) entre `
+      +`${dtBR(a,'min')} e ${dtBR(b,'min')} — carimbos reais do historian</div>`
+      +`<table class="sub">${CAB_REG}<tbody>${linhasRegistros(A,L)}</tbody></table></div>`
+    :`<div class="subwrap"><div class="subtit">Nenhum registro do contador nesta janela.</div></div>`;
+  const nova=el('tr','det');nova.appendChild(td);
+  tr.parentNode.insertBefore(nova,tr.nextSibling);
+  tr.setAttribute('aria-expanded','true');
+  tr.querySelector('.cx').textContent='▾';
+}
+
+/* Renderização progressiva: períodos longos não montam 700 linhas de uma vez. */
+function blocoPaginado(host,total,render,rotulo){
+  let n=0;
+  const passo=PREFS.regPag||200;
+  const info=el('div','pagbar');
+  const mais=el('button','act');mais.type='button';
+  const passoFn=()=>{
+    n=Math.min(total.length,n+passo);
+    render(total.slice(0,n));
+    info.querySelector('.pginfo').textContent=`${nf(n)} de ${nf(total.length)} ${rotulo}`;
+    mais.style.display=n>=total.length?'none':'';
+  };
+  info.innerHTML='<span class="pginfo"></span>';
+  mais.textContent='Mostrar mais';
+  mais.addEventListener('click',passoFn);
+  info.appendChild(mais);
+  host.appendChild(info);
+  passoFn();
+  return info;
+}
+
+function secaoHoras(out){
+  for(const A of LAST.AS){
+    const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por hora — ${esc(A.maq.nome)}`,
+      'Clique em uma linha para ver os registros individuais daquela hora. '
+      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela.');
+    const w=el('div','tblwrap'),tbl=el('table');
+    w.appendChild(tbl);s.appendChild(w);
+    const host=el('div');s.appendChild(host);
+    blocoPaginado(host,A.horas,L=>{tbl.innerHTML=tabelaHoras(A,L)},'horas');
+    ligarExpansao(tbl,A);
+    out.appendChild(s);
+  }
+}
+
+function secaoRegistros(out){
+  for(const A of LAST.AS){
+    const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Registros individuais — ${esc(A.maq.nome)}`,
+      `Cada linha é uma marcação do contador dentro do período, com o carimbo original. `
+      +`“Δ” é a diferença para o registro anterior; “Contabilizado” diz se o incremento entrou na produção do período.`);
+    const barra=el('div','bar-tools');
+    barra.innerHTML='<div class="fld" style="min-width:210px"><label>Mostrar</label><select class="fReg">'
+      +FILTROS_REG.map(([k,r])=>`<option value="${k}"${PREFS.regFiltro===k?' selected':''}>${r}</option>`).join('')
+      +'</select></div>';
+    s.appendChild(barra);
+    const w=el('div','tblwrap'),tbl=el('table');
+    tbl.style.minWidth='760px';
+    w.appendChild(tbl);s.appendChild(w);
+    const host=el('div');s.appendChild(host);
+    const todos=registrosDe(A);
+    const montar=()=>{
+      host.innerHTML='';
+      const L=filtraRegistros(todos,PREFS.regFiltro);
+      if(!L.length){tbl.innerHTML='';host.innerHTML='<div class="empty">Nenhum registro com esse filtro no período.</div>';return}
+      blocoPaginado(host,L,P=>{tbl.innerHTML=CAB_REG+'<tbody>'+linhasRegistros(A,P)+'</tbody>'},'registros');
+    };
+    barra.querySelector('.fReg').addEventListener('change',ev=>{
+      PREFS.regFiltro=ev.target.value;salvarPrefs();montar();
+    });
+    montar();
+    out.appendChild(s);
+  }
+}
+
 /* === 60-charts.js === */
-/* 60-charts.js — Gráfico de produção e faixa de cadência em canvas. */
+/* 60-charts.js — Gráfico de produção e faixa de cadência, em canvas puro.
+   Sem biblioteca externa: rede corporativa costuma bloquear CDN e o arquivo
+   único precisa funcionar offline. */
 "use strict";
 
 function setup(cv,h,forcaW){
@@ -1003,19 +1977,20 @@ function setup(cv,h,forcaW){
   const x=cv.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);x.clearRect(0,0,w,h);
   return{x,w,h};
 }
-function desenhar(){if(!LAST)return;if($('ch'))grafico($('ch'),null,null);if($('tl'))cadencia();}
+function desenhar(){if(!LAST)return;if($('ch'))protegido('o gráfico',()=>grafico($('ch'),null,null));
+  if($('tl'))protegido('a cadência',cadencia);}
 
 function grafico(cv,forcaW,forcaH){
   const T=forcaW?{tx:'#16202E',tx2:'#576578',tx3:'#8593A5',line:'#E1E6ED',card:'#fff',meta:'#D97706'}:TH();
   const {AS,B}=LAST,{x,w,h}=setup(cv,forcaH||340,forcaW);
-  const acum=opAtivo('acum'),rot=opAtivo('rot');
-  const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].janela>0));
+  const acum=secaoAtiva('acum'),rot=secaoAtiva('rot');
+  const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
-    x.fillText('Sem dados no período selecionado',w/2,h/2);return}
+    x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
   const series=AS.map(A=>{let ac=0;return idx.map(i=>{ac+=A.linhas[i].pcs;return acum?ac:A.linhas[i].pcs})});
-  const metaMax=Math.max(...AS.map(a=>a.maq.meta)),capMax=Math.max(...AS.map(a=>a.maq.cap));
+  const metaMax=Math.max(...AS.map(a=>a.maq.meta||0)),capMax=Math.max(...AS.map(a=>a.maq.cap||0));
   let ymax=Math.max(...series.flat(),1);
-  if(!acum){if(opAtivo('meta'))ymax=Math.max(ymax,metaMax);if(opAtivo('cap'))ymax=Math.max(ymax,capMax)}
+  if(!acum){if(secaoAtiva('meta'))ymax=Math.max(ymax,metaMax);if(secaoAtiva('cap'))ymax=Math.max(ymax,capMax)}
   ymax*=1.14;
   const pad={t:16,r:14,b:idx.length>26?50:44,l:forcaW?54:68},iw=w-pad.l-pad.r,ih=h-pad.t-pad.b;
   const Y=v=>pad.t+ih-(v/ymax)*ih,bw=iw/idx.length;
@@ -1027,7 +2002,7 @@ function grafico(cv,forcaW,forcaH){
     x.strokeStyle=T.line;x.lineWidth=1;x.beginPath();x.moveTo(pad.l,Y(v));x.lineTo(w-pad.r,Y(v));x.stroke();
     x.fillStyle=T.tx3;x.textAlign='right';x.fillText(v>=1000?nf(v/1000)+'k':nf(v),pad.l-9,Y(v));
   }
-  const tipo=$('a_tipo').value;
+  const tipo=PREFS.tipo;
   const barras=tipo==='barras'||(tipo==='auto'&&!acum&&idx.length<=26);
   if(barras){
     const gap=Math.min(4,bw*.06),tot=bw*.66,bwid=Math.max(2,(tot-gap*(AS.length-1))/AS.length);
@@ -1057,13 +2032,13 @@ function grafico(cv,forcaW,forcaH){
     if(B[i].dia){x.fillStyle=T.tx3;x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
       x.fillText(B[i].dia,cx,h-pad.b+29)}
   });
-  if(!acum&&opAtivo('cap')){
+  if(!acum&&secaoAtiva('cap')&&capMax>0){
     x.strokeStyle=T.tx3;x.lineWidth=1.4;x.setLineDash([]);
     x.beginPath();x.moveTo(pad.l,Y(capMax));x.lineTo(w-pad.r,Y(capMax));x.stroke();
     x.fillStyle=T.tx3;x.textAlign='left';x.font='500 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
     x.fillText('capacidade '+nf(capMax/1000)+'k',pad.l+5,Y(capMax)-8);
   }
-  if(!acum&&opAtivo('meta')){
+  if(!acum&&secaoAtiva('meta')&&metaMax>0){
     x.strokeStyle=T.meta;x.lineWidth=2;x.setLineDash([7,5]);
     x.beginPath();x.moveTo(pad.l,Y(metaMax));x.lineTo(w-pad.r,Y(metaMax));x.stroke();x.setLineDash([]);
     x.fillStyle=T.meta;x.textAlign='left';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
@@ -1071,25 +2046,27 @@ function grafico(cv,forcaW,forcaH){
   }
 }
 
-/* cadência com eixo comprimido nas janelas com dados */
+/* --- faixa de cadência ---------------------------------------------------
+   O eixo é comprimido nos trechos com cobertura: dias inteiros sem dado viram
+   um divisor tracejado em vez de esticarem o eixo. */
 function segmentos(){
   const {AS}=LAST,br=[];
-  for(const A of AS)for(const j of A.janelas)br.push([j.ini,j.fim]);
+  for(const A of AS)for(const g of A.cobertura)br.push([g.a,g.b]);
+  if(!br.length)br.push([LAST.ini,LAST.fim]);
   br.sort((a,b)=>a[0]-b[0]);
   const m=[];
   for(const s of br){
-    const pad=90000;
-    const a=s[0]-pad,b=s[1]+pad;
+    const folga=90000,a=s[0]-folga,b=s[1]+folga;
     if(m.length&&a<=m[m.length-1][1]+300000)m[m.length-1][1]=Math.max(m[m.length-1][1],b);
     else m.push([a,b]);
   }
   let acc=0;
-  return m.map(s=>{const d=s[1]-s[0];const o={a:s[0],b:s[1],off:acc,dur:d};acc+=d;return o})
+  return m.map(s=>{const d=Math.max(1,s[1]-s[0]);const o={a:s[0],b:s[1],off:acc,dur:d};acc+=d;return o})
     .reduce((o,s)=>{o.segs.push(s);o.total=s.off+s.dur;return o},{segs:[],total:0});
 }
 function cadencia(){
   const T=TH(),{AS}=LAST,S=segmentos();
-  if(!S.segs.length)return;
+  if(!S.segs.length||!S.total)return;
   const {x,w,h}=setup($('tl'),52*AS.length+58);
   const pad={t:26,r:14,l:14},iw=w-pad.l-pad.r;
   const X=t=>{
@@ -1100,7 +2077,6 @@ function cadencia(){
     return pad.l+iw;
   };
   x.textBaseline='middle';
-  // faixa de turnos
   if(LAST.BT.length){
     LAST.BT.forEach((t,i)=>{
       const a=X(t.a),b=X(t.b);
@@ -1115,15 +2091,24 @@ function cadencia(){
     const top=pad.t+k*52,bot=top+38;
     x.fillStyle=T.card2;
     if(x.roundRect){x.beginPath();x.roundRect(pad.l,top,iw,bot-top,6);x.fill()}else x.fillRect(pad.l,top,iw,bot-top);
+    /* ausência de dados: hachura neutra, nunca a cor de parada */
+    for(const g of A.lacunas){
+      const a=X(g.a),b=X(g.b);if(b-a<.5)continue;
+      x.save();x.beginPath();x.rect(a,top,Math.max(1,b-a),bot-top);x.clip();
+      x.strokeStyle=T.tx3;x.globalAlpha=.30;x.lineWidth=1;
+      for(let p=a-(bot-top);p<b+(bot-top);p+=6){x.beginPath();x.moveTo(p,bot);x.lineTo(p+(bot-top),top);x.stroke()}
+      x.restore();x.globalAlpha=1;
+    }
     for(const p of A.paradas){
-      const a=X(p.ini),b=X(p.fim);
+      const a=X(p.a),b=X(p.b);
       x.fillStyle=T.bad;x.globalAlpha=.22;x.fillRect(a,top,Math.max(1.6,b-a),bot-top);x.globalAlpha=1;
       if(b-a>34){x.fillStyle=T.bad;x.textAlign='center';x.font='600 9.5px "IBM Plex Mono",monospace';
         x.fillText(nf1(p.min),(a+b)/2,top+9)}
     }
-    const mx=Math.max(1,...A.ev.map(e=>e.inc));
-    for(const e of A.ev){
-      const px=X(e.t),al=Math.min(1,e.inc/mx);
+    const mx=Math.max(1,...A.eventos.map(e=>e.delta));
+    for(const e of A.eventos){
+      if(!e.contabiliza||e.delta<=0)continue;
+      const px=X(e.t),al=Math.min(1,e.delta/mx);
       x.strokeStyle=A.maq.cor;x.globalAlpha=.4+al*.5;x.lineWidth=1;
       x.beginPath();x.moveTo(px,bot-2);x.lineTo(px,bot-2-(bot-top-6)*(.22+al*.72));x.stroke();
     }
@@ -1131,7 +2116,6 @@ function cadencia(){
     x.fillStyle=A.maq.cor;x.textAlign='left';x.font='600 11.5px Inter,sans-serif';
     x.fillText(A.maq.nome,pad.l+7,top+9);
   });
-  // eixo
   const y=pad.t+AS.length*52+4;
   S.segs.forEach((s,i)=>{
     const passo=s.dur>36*3600000?21600000:(s.dur>10*3600000?7200000:3600000);
@@ -1143,7 +2127,7 @@ function cadencia(){
       x.fillStyle=T.tx3;x.textAlign='center';x.font='500 10.5px "IBM Plex Mono",monospace';
       x.fillText(pad2(d.getHours())+'h',px,y+4);
       if(d.getHours()===0||t===d0.getTime()){x.fillStyle=T.tx2;x.font='600 9.5px Inter,sans-serif';
-        x.fillText(pad2(d.getDate())+'/'+pad2(d.getMonth()+1),px,y+16)}
+        x.fillText(ddmm(d),px,y+16)}
     }
     if(i<S.segs.length-1){
       const px=pad.l+((s.off+s.dur)/S.total)*iw;
@@ -1155,61 +2139,86 @@ function cadencia(){
 let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(desenhar,150)});
 
 /* === 70-reports.js === */
-/* 70-reports.js — Relatório A4, resumo de WhatsApp e texto de e-mail. */
+/* 70-reports.js — Relatório executivo A4, resumo de WhatsApp e texto de
+   e-mail. Todos declaram a janela exata, a base de cálculo e as fórmulas
+   usadas: o número sai da ferramenta junto com o critério que o produziu. */
 "use strict";
 
-const periodoTxt=()=>brDate(LAST.de)+(LAST.de===LAST.ate?'':' a '+brDate(LAST.ate));
+const periodoTxt=()=>dtBR(LAST.ini,'min')+' a '+dtBR(LAST.fim,'min');
 const semTags=s=>String(s).replace(/<[^>]+>/g,'');
+const corOEE=r=>r==null?'#8593A5':r>=.85?'#1B8A5A':r>=.7?'#B27300':'#C33C4E';
+const RODAPE_FORMULAS=()=>'OEE = peças ÷ (capacidade × base ÷ 60). Meta proporcional = meta × base ÷ 60. '
+  +'Base desta emissão: '+rotuloBase(LAST.base)+' — '+descBase(LAST.base)+'. '
+  +'Tempo sem dados é ausência de registro e não é contado como parada.';
 
 function relatorioA4(){
   if(!LAST){toast('Rode a análise primeiro');return}
   const {AS}=LAST,um=AS.length===1,A0=AS[0],c0=A0.maq,t0=A0.tot;
-  const sum=AS.reduce((s,A)=>({pcs:s.pcs+A.tot.pcs,plan:s.plan+A.tot.planCap,meta:s.meta+A.tot.planMeta,
-    par:s.par+A.tot.parauto,npar:s.npar+A.tot.npar}),{pcs:0,plan:0,meta:0,par:0,npar:0});
+  const sum=AS.reduce((s,A)=>({pcs:s.pcs+A.tot.pcs,plan:s.plan+(A.tot.planCapBase||0),
+    meta:s.meta+(A.tot.planMetaBase||0),par:s.par+A.tot.parado,npar:s.npar+A.tot.nPar,
+    sem:s.sem+A.tot.semDados}),{pcs:0,plan:0,meta:0,par:0,npar:0,sem:0});
   const kpis=um?[
     ['Produção',nf(t0.pcs),'peças · '+nf(t0.inc)+' '+esc(c0.unid)+'s'],
-    ['OEE',nf1(t0.oee*100)+'%','de '+nf(t0.planCap)+' planejadas'],
-    ['Atingimento',nf1(t0.ating*100)+'%','meta '+nf(t0.planMeta)],
-    ['Tempo disponível',hDur(t0.planej),'parado '+nf1(t0.parauto)+' min'],
-    ['Intervalo médio',t0.interv?nf1(t0.interv)+' s':'—','entre '+esc(c0.unid)+'s']
+    ['OEE',fmtPct(t0.oeeBase),'de '+fmtVal(t0.planCapBase)+' planejadas'],
+    ['Atingimento',fmtPct(t0.atingBase),'meta '+fmtVal(t0.planMetaBase)],
+    ['Base do cálculo',hDur(t0.tempoBase),rotuloBase(t0.base)],
+    ['Cobertura',fmtPct(t0.cobertura),'sem dados '+hDur(t0.semDados)]
   ]:[
     ['Produção total',nf(sum.pcs),'peças · '+AS.length+' máquinas'],
-    ['OEE consolidado',sum.plan>0?nf1(sum.pcs/sum.plan*100)+'%':'—','de '+nf(sum.plan)+' planejadas'],
-    ['Atingimento',sum.meta>0?nf1(sum.pcs/sum.meta*100)+'%':'—','meta '+nf(sum.meta)],
-    ['Melhor OEE',esc(AS.slice().sort((a,b)=>b.tot.oee-a.tot.oee)[0].maq.nome),'no período'],
+    ['OEE consolidado',pct(sum.pcs,sum.plan),'de '+nf(sum.plan)+' planejadas'],
+    ['Atingimento',pct(sum.pcs,sum.meta),'meta '+nf(sum.meta)],
+    ['Base do cálculo',rotuloBase(LAST.base),'igual para todas'],
     ['Paradas',nf(sum.npar),nf1(sum.par)+' min no total']
   ];
   let esquerda;
   if(um&&A0.turnos.length){
-    esquerda='<h4>Fechamento por turno</h4><table><thead><tr><th>Turno</th><th>Peças</th><th>Horas</th><th>OEE</th><th>Parcial</th></tr></thead><tbody>'
-      +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td><td>${nf(l.pcs)}</td><td>${hDur(l.janela)}</td>`
-        +`<td style="font-weight:700;color:${l.oeeTurno>=.85?'#1B8A5A':l.oeeTurno>=.7?'#B27300':'#C33C4E'}">${nf1(l.oeeTurno*100)}</td>`
-        +`<td>${nf1(l.oeeParcial*100)}</td></tr>`).join('')
-      +`</tbody><tfoot><tr><td>Total</td><td>${nf(t0.pcs)}</td><td>${hDur(t0.janela)}</td><td>${nf1(t0.oee*100)}</td><td>${nf1(t0.oeeParcial*100)}</td></tr></tfoot></table>`;
+    esquerda='<h4>Fechamento por turno</h4><table><thead><tr><th>Turno</th><th>Status</th><th>Peças</th>'
+      +'<th>Com dados</th><th>OEE</th><th>Parcial</th></tr></thead><tbody>'
+      +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td>`
+        +`<td style="text-align:left;font-family:Inter,sans-serif">${l.status.rot}</td>`
+        +`<td>${nf(l.pcs)}</td><td>${hDur(l.comDados)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oee.programado)}">${fmtPct(l.oee.programado)}</td>`
+        +`<td>${fmtPct(l.oee.parcial)}</td></tr>`).join('')
+      +`</tbody><tfoot><tr><td>Total</td><td></td><td>${nf(t0.pcs)}</td><td>${hDur(t0.comDados)}</td>`
+      +`<td>${fmtPct(t0.oeeBase)}</td><td>${fmtPct(t0.oee.parcial)}</td></tr></tfoot></table>`;
   }else if(um){
-    esquerda='<h4>Produção por '+LAST.gran+'</h4><table><thead><tr><th>Período</th><th>Peças</th><th>Meta %</th><th>OEE %</th><th>Parado</th></tr></thead><tbody>'
-      +A0.linhas.filter(l=>l.janela>0).slice(0,20).map(l=>
-        `<tr><td>${(l.bk.dia&&LAST.gran!=='dia'?l.bk.dia+' ':'')+l.bk.rot}</td><td>${nf(l.pcs)}</td>`
-        +`<td>${nf1(l.ating*100)}</td><td style="font-weight:700;color:${l.oee>=.85?'#1B8A5A':l.oee>=.7?'#B27300':'#C33C4E'}">${nf1(l.oee*100)}</td>`
-        +`<td>${l.parauto>0?nf1(l.parauto):'—'}</td></tr>`).join('')
-      +`</tbody><tfoot><tr><td>Total</td><td>${nf(t0.pcs)}</td><td>${nf1(t0.ating*100)}</td><td>${nf1(t0.oee*100)}</td><td>${nf1(t0.parauto)}</td></tr></tfoot></table>`;
+    const vis=A0.horas.filter(l=>l.regs>0).slice(0,20);
+    esquerda='<h4>Produção por hora</h4><table><thead><tr><th>Hora</th><th>Peças</th><th>Meta %</th>'
+      +'<th>OEE %</th><th>Sem dados</th><th>Parado</th></tr></thead><tbody>'
+      +vis.map(l=>`<tr><td>${(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot}</td><td>${nf(l.pcs)}</td>`
+        +`<td>${fmtPct(l.atingBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
+        +`<td>${l.semDados>0?nf1(l.semDados):'—'}</td><td>${l.parado>0?nf1(l.parado):'—'}</td></tr>`).join('')
+      +`</tbody><tfoot><tr><td>Total</td><td>${nf(t0.pcs)}</td><td>${fmtPct(t0.atingBase)}</td>`
+      +`<td>${fmtPct(t0.oeeBase)}</td><td>${nf1(t0.semDados)}</td><td>${nf1(t0.parado)}</td></tr></tfoot></table>`;
   }else{
-    esquerda='<h4>Comparativo por máquina</h4><table><thead><tr><th>Máquina</th><th>Peças</th><th>OEE %</th><th>Meta %</th><th>Ritmo</th><th>Parado</th></tr></thead><tbody>'
+    esquerda='<h4>Comparativo por máquina</h4><table><thead><tr><th>Máquina</th><th>Peças</th><th>OEE %</th>'
+      +'<th>Meta %</th><th>Cobertura</th><th>Parado</th></tr></thead><tbody>'
       +AS.map(A=>`<tr><td>${esc(A.maq.nome)}</td><td>${nf(A.tot.pcs)}</td>`
-        +`<td style="font-weight:700;color:${A.tot.oee>=.85?'#1B8A5A':A.tot.oee>=.7?'#B27300':'#C33C4E'}">${nf1(A.tot.oee*100)}</td>`
-        +`<td>${nf1(A.tot.ating*100)}</td><td>${nf(A.tot.ritmo)}</td><td>${nf1(A.tot.parauto)}</td></tr>`).join('')
-      +`</tbody><tfoot><tr><td>Total</td><td>${nf(sum.pcs)}</td><td>${sum.plan>0?nf1(sum.pcs/sum.plan*100):'—'}</td>`
-      +`<td>${sum.meta>0?nf1(sum.pcs/sum.meta*100):'—'}</td><td>—</td><td>${nf1(sum.par)}</td></tr></tfoot></table>`;
+        +`<td style="font-weight:700;color:${corOEE(A.tot.oeeBase)}">${fmtPct(A.tot.oeeBase)}</td>`
+        +`<td>${fmtPct(A.tot.atingBase)}</td><td>${fmtPct(A.tot.cobertura)}</td>`
+        +`<td>${nf1(A.tot.parado)}</td></tr>`).join('')
+      +`</tbody><tfoot><tr><td>Total</td><td>${nf(sum.pcs)}</td><td>${pct(sum.pcs,sum.plan)}</td>`
+      +`<td>${pct(sum.pcs,sum.meta)}</td><td>—</td><td>${nf1(sum.par)}</td></tr></tfoot></table>`;
   }
-  const todas=AS.flatMap(A=>A.paradas.map(p=>({...p,nm:A.maq.nome,cap:A.maq.cap}))).sort((a,b)=>b.min-a.min).slice(0,5);
+  const todas=AS.flatMap(A=>A.paradas.map(p=>({...p,nm:A.maq.nome,cap:A.maq.cap})))
+    .sort((a,b)=>b.min-a.min).slice(0,5);
   let direita='';
   if(todas.length){
     direita+='<h4>Maiores paradas</h4><table><thead><tr><th>Quando</th>'+(um?'':'<th>Máquina</th>')
       +'<th>Duração</th><th>Peças</th></tr></thead><tbody>'
-      +todas.map(p=>{const a=new Date(p.ini),b=new Date(p.fim);
-        return `<tr><td>${pad2(a.getDate())}/${pad2(a.getMonth()+1)} ${hhmm(a)}–${hhmm(b)}</td>`
-          +(um?'':`<td style="text-align:left;font-family:Inter,sans-serif">${esc(p.nm)}</td>`)
-          +`<td>${nf1(p.min)} min</td><td>${nf(p.min/60*p.cap)}</td></tr>`}).join('')+'</tbody></table>';
+      +todas.map(p=>`<tr><td>${dtCurto(p.a)}–${hhmm(new Date(p.b))}</td>`
+        +(um?'':`<td style="text-align:left;font-family:Inter,sans-serif">${esc(p.nm)}</td>`)
+        +`<td>${nf1(p.min)} min</td><td>${p.cap>0?nf(p.min/60*p.cap):NAO_CALC}</td></tr>`).join('')
+      +'</tbody></table>';
+  }
+  const lac=AS.flatMap(A=>A.lacunas.map(g=>({...g,nm:A.maq.nome}))).sort((a,b)=>b.min-a.min).slice(0,4);
+  if(lac.length){
+    direita+='<h4>Ausência de dados</h4><table><thead><tr><th>Quando</th>'+(um?'':'<th>Máquina</th>')
+      +'<th>Duração</th></tr></thead><tbody>'
+      +lac.map(g=>`<tr><td>${dtCurto(g.a)}–${hhmm(new Date(g.b))}</td>`
+        +(um?'':`<td style="text-align:left;font-family:Inter,sans-serif">${esc(g.nm)}</td>`)
+        +`<td>${nf1(g.min)} min</td></tr>`).join('')+'</tbody></table>';
   }
   direita+='<h4>Leitura do período</h4>'+diagnosticos().slice(0,um?4:5).map(d=>
     `<div class="rp ${d[0]==='ok'?'g':d[0]==='crit'?'r':d[0]==='aten'?'w':''}">`
@@ -1218,7 +2227,7 @@ function relatorioA4(){
   $('rel').innerHTML=`
   <div class="rh">
     <div><h3>Relatório de produção${um?' — '+esc(c0.nome):''}</h3>
-      <div class="rsub">${periodoTxt()} · agrupado por ${LAST.gran}${um?' · '+(c0.modo==='unidade'?'1 peça por incremento':nf(c0.porInc)+' peças por '+esc(c0.unid))+' · capacidade '+nf(c0.cap)+' peças/h':''}</div></div>
+      <div class="rsub">${periodoTxt()} · base: ${esc(rotuloBase(LAST.base))}${um?' · '+(c0.modo==='unidade'?'1 peça por incremento':nf(c0.porInc)+' peças por '+esc(c0.unid))+' · capacidade '+nf(c0.cap)+' peças/h':''}</div></div>
     <div class="rst">Emitido em ${new Date().toLocaleDateString('pt-BR')}<br>${hhmm(new Date())}</div>
   </div>
   <div class="rk">${kpis.map(([k,v,u])=>`<div><div class="lb">${k}</div><div class="vl">${v}</div><div class="un">${u}</div></div>`).join('')}</div>
@@ -1227,9 +2236,30 @@ function relatorioA4(){
     <span><span style="background:#D97706"></span>Meta</span></div>
   <canvas id="relch" height="190"></canvas>
   <div class="cols" style="margin-top:4px"><div>${esquerda}</div><div>${direita}</div></div>
-  <div class="rf"><span>OEE = produzido ÷ (capacidade × tempo disponível). Tempo disponível = janela dos dados menos abono.</span><span>${periodoTxt()}</span></div>`;
+  ${um?blocoRastro(A0):''}
+  <div class="rf"><span>${RODAPE_FORMULAS()}</span><span>${periodoTxt()}</span></div>`;
   $('relbox').classList.add('on');
-  requestAnimationFrame(()=>{grafico($('relch'),712,190);$('relbox').scrollIntoView({behavior:'smooth',block:'start'})});
+  requestAnimationFrame(()=>{protegido('o gráfico do relatório',()=>grafico($('relch'),712,190));
+    $('relbox').scrollIntoView({behavior:'smooth',block:'start'})});
+}
+/* Bloco de rastreabilidade impresso no A4: fórmula e números de cada base. */
+function blocoRastro(A){
+  const t=A.tot,c=A.maq;
+  const L=[
+    ['Programado','período − abono',hDur(t.dur)+' − '+nf1(t.abono)+' min',hDur(t.programado),t.oee.programado],
+    ['Observado','com dados − abono',hDur(t.comDados)+' − '+nf1(t.abonoCoberto)+' min',hDur(t.observado),t.oee.observado],
+    ['Operacional','observado − paradas',hDur(t.observado)+' − '+nf1(t.parado)+' min',hDur(t.operacional),t.oee.operacional],
+    ['Parcial','última marcação − início',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'min'),hDur(t.parcial),t.oee.parcial]
+  ];
+  return '<h4>Bases de cálculo e fórmulas</h4><table><thead><tr><th>Base</th><th>Definição</th>'
+    +'<th>Conta</th><th>Tempo</th><th>Planejado</th><th>OEE</th></tr></thead><tbody>'
+    +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
+      +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
+      +`<td>${fmtVal(t.planCap[['programado','observado','operacional','parcial'][i]])}</td>`
+      +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
+    +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
+    +`Peças = ${nf(t.inc)} incrementos × ${nf(A.pc)} = ${nf(t.pcs)}. `
+    +`Planejado = ${nf(c.cap)} peças/h × base ÷ 60. Meta = ${nf(c.meta)} peças/h × base ÷ 60.</div>`;
 }
 $('r_a4').addEventListener('click',relatorioA4);
 $('r_close').addEventListener('click',()=>$('relbox').classList.remove('on'));
@@ -1242,54 +2272,66 @@ $('r_print').addEventListener('click',()=>{
 
 function textoWhats(){
   const {AS}=LAST;
-  let t=`*Produção ${periodoTxt()}*\n`;
+  let t=`*Produção ${periodoTxt()}*\n_base: ${rotuloBase(LAST.base)}_\n`;
   for(const A of AS){
-    const x=A.tot,c=A.maq,ic=x.oee>=.85?'✅':x.oee>=.7?'⚠️':'🔴';
+    const x=A.tot,c=A.maq;
+    const ic=x.oeeBase==null?'⬜':x.oeeBase>=.85?'✅':x.oeeBase>=.7?'⚠️':'🔴';
     t+=`\n${ic} *${c.nome}*\n`;
     t+=`${nf(x.pcs)} pçs (${nf(x.inc)} ${c.unid}s)\n`;
-    t+=`OEE *${nf1(x.oee*100)}%* · meta ${nf1(x.ating*100)}%\n`;
-    t+=`${hDur(x.planej)} disponíveis · parou ${nf1(x.parauto)} min em ${x.npar}x\n`;
+    t+=`OEE *${fmtPct(x.oeeBase)}* · meta ${fmtPct(x.atingBase)}\n`;
+    t+=`${hDur(x.tempoBase)} de base · parou ${nf1(x.parado)} min em ${x.nPar}x\n`;
+    t+=`Dados: ${A.qual.rotulo} · cobertura ${fmtPct(x.cobertura)}`;
+    t+=x.semDados>0?` · sem dados ${hDur(x.semDados)}\n`:`\n`;
     if(A.turnos.length)for(const l of A.turnos)
-      t+=`  ${l.bk.rot}: ${nf(l.pcs)} pçs · OEE ${nf1(l.oeeTurno*100)}%\n`;
+      t+=`  ${l.bk.dia} ${l.bk.rot}: ${nf(l.pcs)} pçs · OEE ${fmtPct(l.oee.programado)} (${l.status.rot})\n`;
     if(x.refugo>0||x.retrab>0)t+=`Refugo ${nf(x.refugo)} · retrab. ${nf(x.retrab)}\n`;
-    if(A.paradas.length){const p=A.paradas[0];t+=`Maior parada ${hhmm(new Date(p.ini))} · ${nf1(p.min)} min\n`}
+    if(A.paradas.length){const p=A.paradas[0];t+=`Maior parada ${dtCurto(p.a)} · ${nf1(p.min)} min\n`}
   }
   return t;
 }
 function textoEmail(){
   const {AS}=LAST;
-  const sum=AS.reduce((s,A)=>({pcs:s.pcs+A.tot.pcs,plan:s.plan+A.tot.planCap,meta:s.meta+A.tot.planMeta}),{pcs:0,plan:0,meta:0});
-  const oee=sum.plan>0?sum.pcs/sum.plan:0;
-  const assunto=`Produção ${periodoTxt()} — OEE ${nf1(oee*100)}%`
+  const sum=AS.reduce((s,A)=>({pcs:s.pcs+A.tot.pcs,plan:s.plan+(A.tot.planCapBase||0),
+    meta:s.meta+(A.tot.planMetaBase||0)}),{pcs:0,plan:0,meta:0});
+  const oee=razao(sum.pcs,sum.plan);
+  const assunto=`Produção ${dtBR(LAST.ini,'min')} a ${dtBR(LAST.fim,'min')} — OEE ${fmtPct(oee)}`
     +(AS.length===1?` (${AS[0].maq.nome})`:` (${AS.length} máquinas)`);
-  let b=`Assunto: ${assunto}\n\nPrezados,\n\nSegue o fechamento de produção de ${periodoTxt()}, apurado a partir do contador do historian.\n\n`;
-  b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${nf1(oee*100)}%\n`;
-  b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${sum.meta>0?nf1(sum.pcs/sum.meta*100):'—'}%\n\n`;
+  let b=`Assunto: ${assunto}\n\nPrezados,\n\nSegue o fechamento de produção de ${periodoTxt()}, `
+    +`apurado a partir do contador do historian.\n\n`;
+  b+=`JANELA E CRITÉRIO\nPeríodo: ${periodoTxt()}\nBase de cálculo: ${rotuloBase(LAST.base)} — ${descBase(LAST.base)}\n`;
+  b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n\n`;
+  b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${fmtPct(oee)}\n`;
+  b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${pct(sum.pcs,sum.meta)}\n\n`;
   for(const A of AS){
     const x=A.tot,c=A.maq;
     b+=`${c.nome.toUpperCase()}\n`;
-    b+=`- Produção: ${nf(x.pcs)} peças (${nf(x.inc)} ${c.unid}s, ${nf(pecas(c))} peças cada)\n`;
-    b+=`- Tempo: janela de ${hDur(x.janela)}, disponível ${hDur(x.planej)}, rodando ${hDur(x.oper)}\n`;
-    b+=`- OEE: ${nf1(x.oee*100)}% — ${nf(x.pcs)} produzidas contra ${nf(x.planCap)} planejadas (${nf(c.cap)} peças/h)\n`;
-    b+=`- Meta: ${nf1(x.ating*100)}% de ${nf(x.planMeta)} peças\n`;
-    b+=`- Paradas: ${x.npar} somando ${nf1(x.parauto)} min — disponibilidade ${nf1(x.disp*100)}%\n`;
-    b+=`- Intervalo médio entre ${c.unid}s: ${x.interv?nf1(x.interv)+' s':'—'}\n`;
-    if(x.abono>0)b+=`- Abono: ${nf1(x.abono)} min, descontados do tempo disponível\n`;
+    b+=`- Produção: ${nf(x.pcs)} peças (${nf(x.inc)} ${c.unid}s, ${nf(A.pc)} peças cada)\n`;
+    if(x.naoAtrib>0)b+=`- Não atribuído: ${nf(x.naoAtrib)} incrementos vindos após lacuna ou borda, fora da contagem\n`;
+    b+=`- Primeira marcação: ${x.primeiroReg==null?NAO_CALC:dtBR(x.primeiroReg)}\n`;
+    b+=`- Última marcação: ${x.ultimoReg==null?NAO_CALC:dtBR(x.ultimoReg)}\n`;
+    b+=`- Tempo: período ${hDur(x.dur)}, com dados ${hDur(x.comDados)}, sem dados ${hDur(x.semDados)}, rodando ${hDur(x.operacional)}\n`;
+    b+=`- OEE programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
+    b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
+    b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;
+    b+=`- Intervalo médio entre ${c.unid}s: ${fmtSeg(x.interv)}\n`;
+    if(x.abono>0)b+=`- Abono: ${nf1(x.abono)} min, descontados de todas as bases\n`;
     if(x.extra>0)b+=`- Hora extra: ${nf1(x.extra)} min\n`;
-    if(x.refugo>0||x.retrab>0)b+=`- Refugo ${nf(x.refugo)} e retrabalho ${nf(x.retrab)} peças — OEE líquido ${nf1(x.oeeLiq*100)}%\n`;
+    if(x.refugo>0||x.retrab>0)b+=`- Refugo ${nf(x.refugo)} e retrabalho ${nf(x.retrab)} peças — OEE líquido ${fmtPct(x.oeeLiq)}\n`;
     if(A.turnos.length){
       b+=`- Por turno:\n`;
       for(const l of A.turnos)
-        b+=`   ${l.bk.dia} ${l.bk.rot}: ${nf(l.pcs)} peças em ${hDur(l.janela)} — OEE ${nf1(l.oeeTurno*100)}% (parcial ${nf1(l.oeeParcial*100)}%)\n`;
+        b+=`   ${l.bk.dia} ${l.bk.rot} [${l.status.rot}]: ${nf(l.pcs)} peças em ${hDur(l.comDados)} com dados — OEE ${fmtPct(l.oee.programado)} (parcial ${fmtPct(l.oee.parcial)})\n`;
     }
     if(A.paradas.length)
-      b+=`- Maiores paradas: `+A.paradas.slice(0,3).map(p=>{const a=new Date(p.ini),z=new Date(p.fim);
-        return `${pad2(a.getDate())}/${pad2(a.getMonth()+1)} ${hhmm(a)}-${hhmm(z)} (${nf1(p.min)} min)`}).join('; ')+`\n`;
+      b+=`- Maiores paradas: `+A.paradas.slice(0,3).map(p=>`${dtCurto(p.a)}-${hhmm(new Date(p.b))} (${nf1(p.min)} min)`).join('; ')+`\n`;
+    if(A.lacunas.length)
+      b+=`- Maiores lacunas de dados: `+A.lacunas.slice(0,3).map(g=>`${dtCurto(g.a)}-${hhmm(new Date(g.b))} (${nf1(g.min)} min)`).join('; ')+`\n`;
     b+=`\n`;
   }
   b+=`PONTOS DE ATENÇÃO\n`+diagnosticos().slice(0,4).map((d,i)=>`${i+1}. ${semTags(d[3])} — ${semTags(d[4])}`).join('\n');
-  b+=`\n\nCritério: OEE = produzido dividido pelo planejado, sendo o planejado a capacidade da máquina multiplicada pelo tempo disponível. `
-    +`O tempo disponível é a janela coberta pelos dados menos o abono lançado. As paradas vêm da ausência de incremento no contador e devem ser confrontadas com o apontamento do MES.\n\nAtenciosamente,\n`;
+  b+=`\n\nCRITÉRIO\n${RODAPE_FORMULAS()} As paradas vêm da ausência de incremento no contador e devem ser `
+    +`confrontadas com o apontamento do MES.\n\nAtenciosamente,\n`;
   return{assunto,corpo:b};
 }
 function mostrarTexto(titulo,sub,texto,mail){
@@ -1317,6 +2359,90 @@ $('r_wa').addEventListener('click',()=>{if(!LAST){toast('Rode a análise primeir
   mostrarTexto('Resumo para WhatsApp','Já formatado com asteriscos para colar na conversa.',textoWhats())});
 $('r_em').addEventListener('click',()=>{if(!LAST){toast('Rode a análise primeiro');return}
   const m=textoEmail();mostrarTexto('Texto para e-mail','Assunto na primeira linha.',m.corpo,m)});
+
+/* === 75-export.js === */
+/* 75-export.js — Exportações em CSV. Toda exportação usa exatamente a mesma
+   janela, os mesmos limiares e a mesma base de cálculo da tela: o arquivo
+   nunca traz um recorte diferente do que o usuário está vendo. */
+"use strict";
+
+const csvTxt=v=>{const s=String(v??'');return /[;"\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s};
+const csvNum=(v,d)=>v==null||!Number.isFinite(v)?'':v.toFixed(d===undefined?2:d).replace('.',',');
+const csvPct=r=>r==null?'':(r*100).toFixed(1).replace('.',',');
+const csvData=ms=>ms==null?'':dtBR(ms);
+
+function baixarCSV(nome,linhas){
+  const txt='﻿'+linhas.map(r=>r.map(csvTxt).join(';')).join('\r\n');
+  const a=document.createElement('a');
+  const url=URL.createObjectURL(new Blob([txt],{type:'text/csv;charset=utf-8'}));
+  a.href=url;a.download=nome;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+function sufixoJanela(){
+  const f=ms=>iso(new Date(ms))+'_'+hhmm(new Date(ms)).replace(':','');
+  return f(LAST.ini)+'-'+f(LAST.fim);
+}
+const cabecalhoJanela=()=>[
+  ['Periodo_inicio',dtBR(LAST.ini)],['Periodo_fim',dtBR(LAST.fim)],
+  ['Base_de_calculo',rotuloBase(LAST.base)],
+  ['Limiar_parada_min',csvNum(LAST.lim,1)],['Limiar_sem_dados_min',csvNum(LAST.limSD,1)],
+  ['Turno_desconsiderado',LAST.excl?(TUR.find(t=>t.id===LAST.excl)||{}).nome||LAST.excl:'nenhum'],
+  ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
+];
+
+const COLS_METRICA=['Registros','Incrementos','Pecas','Nao_atribuido','Meta_pecas','Atingimento_%',
+  'Planejado_pecas','OEE_base_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
+  'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min','Programado_min','Observado_min',
+  'Operacional_min','Parcial_min','Cobertura_%','Disponibilidade_%','Ritmo_pecas_h','Intervalo_s'];
+const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.naoAtrib),
+  csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
+  csvPct(l.oee.programado),csvPct(l.oee.observado),csvPct(l.oee.operacional),csvPct(l.oee.parcial),
+  csvNum(l.dur,1),csvNum(l.comDados,1),csvNum(l.semDados,1),csvNum(l.parado,1),csvNum(l.abono,1),
+  csvNum(l.programado,1),csvNum(l.observado,1),csvNum(l.operacional,1),csvNum(l.parcial,1),
+  csvPct(l.cobertura),csvPct(l.disp),csvNum(l.ritmo,0),csvNum(l.interv,1)];
+const nf0=v=>v==null||!Number.isFinite(v)?'':String(Math.round(v));
+
+function exportarCSV(tipo){
+  if(!LAST){toast('Rode a análise primeiro');return}
+  const L=cabecalhoJanela().slice();
+  let nome='producao';
+  if(tipo==='periodo'){
+    nome='periodo';
+    L.push(['Maquina','Inicio','Fim',...COLS_METRICA]);
+    for(const A of LAST.AS)L.push([A.maq.nome,dtBR(LAST.ini),dtBR(LAST.fim),...linhaMetrica(A.tot)]);
+  }else if(tipo==='turno'){
+    nome='turnos';
+    L.push(['Maquina','Dia','Turno','Status','Anexado','Recortado','Inicio','Fim',...COLS_METRICA]);
+    for(const A of LAST.AS)for(const l of A.turnos)
+      L.push([A.maq.nome,l.bk.dia,l.bk.rot,l.status.rot,l.bk.anexado?'sim':'nao',
+        l.bk.recortado?'sim':'nao',dtBR(l.a),dtBR(l.b),...linhaMetrica(l)]);
+  }else if(tipo==='hora'){
+    nome='horas';
+    L.push(['Maquina','Inicio','Fim','Hora_cheia',...COLS_METRICA]);
+    for(const A of LAST.AS)for(const l of A.horas)
+      L.push([A.maq.nome,dtBR(l.a),dtBR(l.b),l.bk.parcial?'nao':'sim',...linhaMetrica(l)]);
+  }else if(tipo==='registros'){
+    nome='registros';
+    L.push(['Maquina','Data_hora','Contador','Delta','Pecas','Intervalo_s','Classificacao','Contabilizado']);
+    for(const A of LAST.AS)for(const r of registrosDe(A)){
+      const e=r.ev;
+      L.push([A.maq.nome,csvData(r.t),nf0(r.valor),e?nf0(e.delta):'',
+        e?nf0(e.contabiliza?e.delta*A.pc:0):'',e?csvNum(e.gapS,1):'',
+        r.marcas.map(m=>CLS_REG[m][0]).join(' + '),e?(e.contabiliza?'sim':'nao'):'']);
+    }
+  }else if(tipo==='paradas'){
+    nome='paradas';
+    L.push(['Maquina','Tipo','Inicio','Fim','Duracao_min','Pecas_equivalentes']);
+    for(const A of LAST.AS){
+      for(const p of A.paradas)L.push([A.maq.nome,'Parada detectada',dtBR(p.a),dtBR(p.b),
+        csvNum(p.min,1),nf0(A.maq.cap>0?p.min/60*A.maq.cap:null)]);
+      for(const g of A.lacunas)L.push([A.maq.nome,'Ausencia de dados',dtBR(g.a),dtBR(g.b),
+        csvNum(g.min,1),'']);
+    }
+  }else return;
+  baixarCSV('mes-'+nome+'-'+sufixoJanela()+'.csv',L);
+  toast('CSV gerado com a janela e os filtros da tela');
+}
 
 /* === 80-maquinas.js === */
 /* 80-maquinas.js — Cadastro de máquinas. */
@@ -1440,11 +2566,15 @@ $('t_padrao').addEventListener('click',async()=>{
     await put('turnos',{id:uid(),nome,inicio,fim});
   await recarregar();montarTurnos();toast('Três turnos criados — ajuste os horários se precisar')});
 
+/* Regra do turno desconsiderado: a ocorrência escolhida deixa de existir como
+   linha e sua janela é absorvida pelo turno cronologicamente seguinte, sem que
+   nenhum registro seja contado duas vezes. A escolha fica salva nas preferências. */
 function montarBorda(){
-  const s=$('a_borda'),atual=s.value;
-  s.innerHTML='<option value="todos">Manter em cada turno cadastrado</option>'
-    +TUR.map(t=>`<option value="sem:${t.id}">Não usar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
-  if(atual&&[...s.options].some(o=>o.value===atual))s.value=atual;
+  const s=$('a_borda'),atual=s.value||PREFS.borda||'todos';
+  s.innerHTML='<option value="todos">Manter cada turno cadastrado</option>'
+    +TUR.map(t=>`<option value="sem:${t.id}">Desconsiderar o ${esc(t.nome)} — anexar ao turno seguinte</option>`).join('');
+  s.value=[...s.options].some(o=>o.value===atual)?atual:'todos';
+  PREFS.borda=s.value;
 }
 
 /* === 82-lancamentos.js === */
@@ -1503,7 +2633,12 @@ $('d_add').addEventListener('click',async()=>{
 });
 
 /* === 83-dados.js === */
-/* 83-dados.js — Cobertura da base, backup e restauração. */
+/* 83-dados.js — Cobertura da base, backup e restauração.
+
+   O backup carrega os dados de produção (IndexedDB) e, num campo separado,
+   as preferências de tela (localStorage). Restaurar um backup de versão
+   anterior, sem esse campo, continua funcionando: as preferências atuais
+   simplesmente são mantidas. */
 "use strict";
 
 async function montarDados(){
@@ -1527,8 +2662,9 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:3,exportado:new Date().toISOString(),maquinas:await getAll('maquinas'),
-    turnos:await getAll('turnos'),ajustes:await getAll('ajustes'),dias:await getAll('dias')};
+  const bk={versao:4,dbVersao:DB_VER,exportado:new Date().toISOString(),
+    maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
+    ajustes:await getAll('ajustes'),dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(bk)],{type:'application/json'}));
   a.download='backup-monitor-hh-'+iso(new Date())+'.json';a.click();toast('Backup gerado')});
@@ -1548,65 +2684,124 @@ $('db_file').addEventListener('change',e=>{
           d.pts=[...mp.entries()].sort((a,b)=>a[0]-b[0])}
         await put('dias',d);
       }
+      if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
       await recarregar();montarMaquinas();montarTurnos();montarDia();montarAnalise();montarDados();
-      toast('Backup restaurado e mesclado');
-    }catch(x){toast('Arquivo de backup inválido')}
+      toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
+    }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };
   rd.readAsText(f);e.target.value=''});
+/* Apagar a base é diferente de limpar o relatório: aquele botão, na aba
+   Análise, só limpa a tela. Este remove os registros importados. */
 $('db_del').addEventListener('click',async()=>{
-  if(!confirm('Apagar todos os registros de produção? Máquinas, turnos e lançamentos são mantidos.'))return;
+  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
   await clearS('dias');await montarDados();
   $('a_out').innerHTML='';$('a_vazio').style.display='block';$('relbox').classList.remove('on');LAST=null;
   toast('Registros de produção apagados')});
 
 /* === 90-montagem.js === */
-/* 90-montagem.js — Ligação dos controles da análise e exportação em CSV. */
+/* 90-montagem.js — Ligação dos controles da aba Análise: máquinas, seções,
+   seletor de cartões, filtros rápidos, limpar relatório e atualização
+   automática. Nada de cálculo aqui. */
 "use strict";
 
 function montarAnalise(){
   const w=$('a_maqs');
   if(!MAQ.length)w.innerHTML='<span style="font-size:13.5px;color:var(--tx3)">Cadastre uma máquina para começar.</span>';
   else{
-    w.innerHTML=MAQ.map((m,i)=>`<label class="opt${i===0?' on':''}"><input type="checkbox" value="${m.id}" ${i===0?'checked':''}>`
-      +`<span class="sw" style="background:${m.cor}"></span>${esc(m.nome)}</label>`).join('');
-    w.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>i.closest('.opt').classList.toggle('on',i.checked)));
+    const antes=new Set([...w.querySelectorAll('input:checked')].map(i=>i.value));
+    w.innerHTML=MAQ.map((m,i)=>{
+      const on=antes.size?antes.has(m.id):i===0;
+      return `<label class="opt${on?' on':''}"><input type="checkbox" value="${m.id}"${on?' checked':''}>`
+        +`<span class="sw" style="background:${m.cor}"></span>${esc(m.nome)}</label>`;
+    }).join('');
+    w.querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>{
+      i.closest('.opt').classList.toggle('on',i.checked);if(LAST)rodarAnalise();
+    }));
   }
   if(!$('a_ops').children.length){
-    $('a_ops').innerHTML=OPCOES.map(([k,r,d])=>`<label class="opt${d?' on':''}"><input type="checkbox" value="${k}" ${d?'checked':''}>${r}</label>`).join('');
+    $('a_ops').innerHTML=OPCOES.map(([k,r])=>
+      `<label class="opt${secaoAtiva(k)?' on':''}"><input type="checkbox" value="${k}"${secaoAtiva(k)?' checked':''}>${r}</label>`).join('');
     $('a_ops').querySelectorAll('input').forEach(i=>i.addEventListener('change',()=>{
-      i.closest('.opt').classList.toggle('on',i.checked);if(LAST)renderAnalise()}));
+      i.closest('.opt').classList.toggle('on',i.checked);
+      PREFS.secoes[i.value]=i.checked;salvarPrefs();
+      if(LAST)protegido('a análise',renderAnalise);
+    }));
   }
 }
-$('a_go').addEventListener('click',rodarAnalise);
-['a_gran','a_tipo','a_lim','a_de','a_ate','a_borda'].forEach(id=>$(id).addEventListener('change',()=>{if(LAST)rodarAnalise()}));
 
-function expCSV(){
-  if(!LAST)return;
-  const L=[['Maquina','Periodo','Registros','Incrementos','Pecas','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_%','Disponivel_min','Parado_min','Abono_min','Ritmo_pecas_h','Intervalo_s']];
-  for(const A of LAST.AS)for(const l of A.linhas){
-    if(l.janela<=0&&l.abono<=0)continue;
-    L.push([A.maq.nome,(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot,l.ap,Math.round(l.inc),Math.round(l.pcs),
-      Math.round(l.planMeta),(l.ating*100).toFixed(1).replace('.',','),Math.round(l.planCap),
-      (l.oee*100).toFixed(1).replace('.',','),l.planej.toFixed(1).replace('.',','),
-      l.parauto.toFixed(1).replace('.',','),l.abono.toFixed(1).replace('.',','),
-      Math.round(l.ritmo),l.interv?l.interv.toFixed(1).replace('.',','):'']);
-  }
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\uFEFF'+L.map(r=>r.join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'}));
-  a.download='producao-'+LAST.de+'_'+LAST.ate+'.csv';a.click();
+/* --- seletor de cartões --------------------------------------------------
+   A escolha é gravada em localStorage e sobrevive ao recarregamento. */
+function dialogoCards(){
+  $('dlg_t').textContent='Cartões do resumo';
+  $('dlg_p').textContent='Escolha o que aparece no topo da análise. A seleção fica salva neste navegador.';
+  const grupos=[...new Set(CARDS.map(c=>c[2]))];
+  $('dlg_b').innerHTML=grupos.map(g=>
+    `<div class="sublbl" style="margin-top:12px">${esc(g)}</div><div class="opts">`
+    +CARDS.filter(c=>c[2]===g).map(([k,r])=>
+      `<label class="opt${cardAtivo(k)?' on':''}"><input type="checkbox" data-card="${k}"${cardAtivo(k)?' checked':''}>${esc(r)}</label>`).join('')
+    +'</div>').join('');
+  $('dlg_b').querySelectorAll('input[data-card]').forEach(i=>i.addEventListener('change',()=>{
+    i.closest('.opt').classList.toggle('on',i.checked);
+    PREFS.cards[i.dataset.card]=i.checked;
+  }));
+  $('dlg_f').innerHTML='';
+  const rest=el('button','act');rest.type='button';rest.textContent='Restaurar padrão';
+  rest.addEventListener('click',()=>{PREFS.cards=prefsPadrao().cards;salvarPrefs();$('dlg').close();
+    dialogoCards();if(LAST)protegido('a análise',renderAnalise)});
+  const ok=el('button','act pri');ok.type='button';ok.textContent='Aplicar';
+  ok.addEventListener('click',()=>{salvarPrefs();$('dlg').close();
+    if(LAST)protegido('a análise',renderAnalise);toast('Seleção de cartões salva')});
+  $('dlg_f').append(rest,ok);$('dlg').showModal();
 }
+
+/* --- aplicação das preferências nos controles ---------------------------- */
+function montarBases(){
+  $('a_base').innerHTML=BASES.map(([k,r,d])=>
+    `<option value="${k}" title="${esc(d)}">${esc(r)}</option>`).join('');
+}
+function aplicarPrefsNaTela(){
+  montarBases();
+  $('a_hde').value=PREFS.hDe;$('a_hate').value=PREFS.hAte;
+  $('a_gran').value=PREFS.gran;$('a_tipo').value=PREFS.tipo;$('a_base').value=PREFS.base;
+  $('a_lim').value=PREFS.limParada;$('a_limsd').value=PREFS.limSemDados;
+  $('a_autoseg').value=PREFS.autoSeg;
+  $('a_basehelp').textContent=descBase(PREFS.base);
+}
+
+/* --- ligações ------------------------------------------------------------ */
+$('a_go').addEventListener('click',()=>rodarAnalise());
+$('a_cards').addEventListener('click',dialogoCards);
+$('a_limpar').addEventListener('click',limparRelatorio);
+$('a_base').addEventListener('change',()=>{$('a_basehelp').textContent=descBase($('a_base').value)});
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base']
+  .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
+document.querySelectorAll('#a_rapidos button[data-rap]')
+  .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
+$('a_auto').addEventListener('change',e=>{
+  if(e.target.checked)ligarAuto();
+  else{pararAuto();PREFS.auto=false;salvarPrefs();$('a_autoinfo').textContent='Atualização automática desligada.'}
+});
+$('a_autoseg').addEventListener('change',()=>{if($('a_auto').checked)ligarAuto()});
 
 /* === 99-boot.js === */
-/* 99-boot.js — Abertura do banco e primeira renderização. */
+/* 99-boot.js — Abertura do banco, preferências e primeira renderização. */
 "use strict";
 
 (async function(){
-  try{await abrir()}catch(e){toast('Não foi possível abrir o banco local. Saia do modo privativo do navegador.');return}
+  carregarPrefs();
+  aplicarPrefsNaTela();
+  try{await abrir()}
+  catch(e){
+    console.error('[monitor] IndexedDB indisponível',e);
+    toast('Não foi possível abrir o banco local. Saia do modo privativo do navegador.');
+    return;
+  }
   await recarregar();
   const hoje=new Date();
   $('a_de').value=iso(new Date(hoje.getTime()-6*86400000));
   $('a_ate').value=iso(hoje);$('d_data').value=iso(hoje);
-  montarMaquinas();montarTurnos();montarDia();montarAnalise();await montarDados();
+  montarMaquinas();montarTurnos();montarDia();montarAnalise();
+  await montarDados();
   PRONTO=true;
   if(!MAQ.length){
     await put('maquinas',{id:uid(),nome:'VAEB 01',etapa:'Packout',modo:'lote',porInc:1000,unid:'caixa',
@@ -1615,6 +2810,7 @@ function expCSV(){
     await recarregar();montarMaquinas();montarAnalise();montarDia();await montarDados();
     mostrar('maquinas');toast('Criei a VAEB 01 como ponto de partida — edite ou adicione as outras');
   }
+  if(PREFS.auto){$('a_auto').checked=true;ligarAuto()}
 })();
 
 </script>

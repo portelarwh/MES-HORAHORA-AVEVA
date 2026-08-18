@@ -8,6 +8,7 @@ async function importar(files){
   const log=$('i_log');log.innerHTML='';
   for(const f of files)await umArquivo(f,maq,log);
   await recarregar();montarAnalise();montarDados();
+  if(LAST)await rodarAnalise();          // a análise aberta passa a refletir o que entrou
 }
 function escolherMaquina(){return new Promise(res=>{
   $('dlg_t').textContent='De qual máquina é este arquivo?';
