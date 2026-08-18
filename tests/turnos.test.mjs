@@ -38,12 +38,30 @@ test('turnos que viram a meia-noite mantêm a duração cadastrada', () => {
   assert.equal(terceiro[terceiro.length - 1].durCadastrada, 440);   // 22:40 -> 06:00
 });
 
-test('cenário 7 — desconsiderar o 3º turno anexa a janela ao turno seguinte, sem perder tempo', () => {
+test('cenário 7 — desconsiderar um turno tira as horas dele do denominador', () => {
   const B = A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3');
   assert.ok(!B.some(b => b.turnoId === 't3'), 'o 3º turno não aparece como linha');
-  assert.equal(somaMin(B), 1440, 'o período continua totalmente coberto');
-  assert.ok(B.some(b => b.anexado), 'ao menos uma linha está marcada como anexada');
+  assert.ok(B.some(b => b.anexado), 'ao menos uma linha recebeu a produção do turno desconsiderado');
+  /* Regra do turno de limpeza: quem recebe as caixas adiantadas conta a
+     produção, mas continua medido pelo próprio horário. As horas do turno
+     desconsiderado saem do tempo — é isso que o torna "não produtivo". */
+  assert.equal(somaMin(B), 1440 - 440, 'as horas do 3º turno saem do fechamento');
+  for (const b of B) assert.equal(b.durCadastrada, b.turnoId === 't1' ? 500 : 500);
   for (let i = 0; i < B.length - 1; i++) assert.ok(B[i].b <= B[i + 1].a);
+});
+
+test('cenário 7 — a janela de produção do turno seguinte alcança o turno desconsiderado', () => {
+  const B = A.turnosNoIntervalo(TUR, DIA_INI, DIA_FIM, 't3');
+  const primeiro = B.find(b => b.turnoId === 't1');
+  assert.equal(primeiro.a, ts(2026, 8, 17, 6, 0), 'o tempo do turno começa no horário cadastrado');
+  assert.ok(primeiro.aProd < primeiro.a, 'a produção é contada desde antes do turno');
+  /* Nenhum minuto de produção fica sem dono: as janelas de produção cobrem
+     o período inteiro, mesmo com as horas do 3º turno fora do denominador. */
+  const prod = B.map(b => ({ a: b.aProd, b: b.bProd })).sort((x, y) => x.a - y.a);
+  assert.equal(prod[0].a, DIA_INI);
+  assert.equal(prod[prod.length - 1].b, DIA_FIM);
+  for (let i = 0; i < prod.length - 1; i++)
+    assert.equal(prod[i].b, prod[i + 1].a, 'as janelas de produção são contíguas e não se sobrepõem');
 });
 
 test('as ocorrências são recortadas na janela e sinalizadas', () => {
