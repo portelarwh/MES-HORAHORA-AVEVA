@@ -107,6 +107,7 @@ function blocoRastro(A){
   const t=A.tot,c=A.maq;
   const L=[
     ['Marcações','última − primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'min')+' → '+dtBR(t.ultimoReg,'min'),hDur(t.marcacoes),t.oee.marcacoes],
+    ['Turno cadastrado','horas de turno no período',hDur(t.emTurno)+' − '+nf1(t.abono)+' min',hDur(t.turno),t.oee.turno],
     ['Programado','período − abono',hDur(t.dur)+' − '+nf1(t.abono)+' min',hDur(t.programado),t.oee.programado],
     ['Observado','com dados − abono',hDur(t.comDados)+' − '+nf1(t.abonoCoberto)+' min',hDur(t.observado),t.oee.observado],
     ['Operacional','observado − paradas',hDur(t.observado)+' − '+nf1(t.parado)+' min',hDur(t.operacional),t.oee.operacional],
@@ -116,7 +117,7 @@ function blocoRastro(A){
     +'<th>Conta</th><th>Tempo</th><th>Planejado</th><th>OEE</th></tr></thead><tbody>'
     +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
-      +`<td>${fmtVal(t.planCap[['marcacoes','programado','observado','operacional','parcial'][i]])}</td>`
+      +`<td>${fmtVal(t.planCap[['marcacoes','turno','programado','observado','operacional','parcial'][i]])}</td>`
       +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
     +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
     +`Leitura do contador ${fmtVal(t.leituraIni)} → ${fmtVal(t.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(t.contagemInicial)}). `
@@ -176,7 +177,8 @@ function textoEmail(){
     b+=`- Tempo: período ${hDur(x.dur)}, com dados ${hDur(x.comDados)}, sem dados ${hDur(x.semDados)}, rodando ${hDur(x.operacional)}\n`;
     b+=`- Leitura do contador: ${fmtVal(x.leituraIni)} → ${fmtVal(x.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(x.contagemInicial)})\n`;
     if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
-    b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    if(x.incForaTurno>0)b+=`- Bônus: ${nf(x.pcsForaTurno)} peças produzidas fora de turno cadastrado, no numerador sem custar denominador\n`;
+    b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
     b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças — atingimento ${fmtPct(x.atingBase)}\n`;
     b+=`- Paradas: ${x.nPar} somando ${nf1(x.parado)} min — disponibilidade ${fmtPct(x.disp)}\n`;
     b+=`- Qualidade dos dados: ${A.qual.rotulo} (cobertura ${fmtPct(x.cobertura)}, ${x.nLac} lacuna(s))\n`;

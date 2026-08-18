@@ -153,7 +153,8 @@ function secaoHoras(out){
   for(const A of LAST.AS){
     const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por hora — ${esc(A.maq.nome)}`,
       'Clique em uma linha para ver os registros individuais daquela hora. '
-      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela.');
+      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela.',
+      'horas:'+A.maq.id);
     const w=el('div','tblwrap'),tbl=el('table');
     w.appendChild(tbl);s.appendChild(w);
     const host=el('div');s.appendChild(host);
@@ -167,7 +168,8 @@ function secaoRegistros(out){
   for(const A of LAST.AS){
     const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Registros individuais — ${esc(A.maq.nome)}`,
       `Cada linha é uma marcação do contador dentro do período, com o carimbo original. `
-      +`“Δ” é a diferença para o registro anterior; “Contabilizado” diz se o incremento entrou na produção do período.`);
+      +`“Δ” é a diferença para o registro anterior; “Contabilizado” diz se o incremento entrou na produção do período.`,
+      'registros:'+A.maq.id);
     const barra=el('div','bar-tools');
     barra.innerHTML='<div class="fld" style="min-width:210px"><label>Mostrar</label><select class="fReg">'
       +FILTROS_REG.map(([k,r])=>`<option value="${k}"${PREFS.regFiltro===k?' selected':''}>${r}</option>`).join('')

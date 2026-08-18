@@ -31,6 +31,7 @@ function unirSegs(segs){
   return out;
 }
 function ovlSegs(segs,a,b){let s=0;for(const g of segs)s+=ovl(g.a,g.b,a,b);return s}
+const dentroSegs=(segs,t)=>segs.some(g=>t>=g.a&&t<g.b);
 function recortarSegs(segs,a,b){
   return segs.map(g=>({...g,a:Math.max(g.a,a),b:Math.min(g.b,b)})).filter(g=>g.b>g.a);
 }
@@ -132,7 +133,8 @@ function analisarMaquina(maq,dias,opts){
   const tcs=eventos.filter(e=>e.contabiliza&&e.delta>0).map(e=>e.gapS/e.delta).sort((a,b)=>a-b);
   const q=p=>tcs.length?tcs[Math.min(tcs.length-1,Math.floor(p*tcs.length))]:null;
 
-  return{maq,pc,ini,fim,base:opts.base||'programado',
+  return{maq,pc,ini,fim,base:opts.base||'marcacoes',
+    turnoSegs:opts.turnoSegs||[],
     ajustes:opts.ajustes||[],pts,dentro,eventos,
     cobertura:cob,lacunas:lac.sort((a,b)=>b.min-a.min),
     paradas:par.sort((a,b)=>b.min-a.min),
@@ -190,8 +192,9 @@ function lancDe(ajustes,id,a,b,pc){
 function metricas(A,a,b,prod){
   const c=A.maq,pc=A.pc;
   const pa=prod&&prod.a!=null?prod.a:a, pb=prod&&prod.b!=null?prod.b:b;
-  let inc=0,incAbsorvido=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
+  let inc=0,incAbsorvido=0,incForaTurno=0,regs=0,naoAtrib=0,semAlt=0,resets=0;
   let incAposLacuna=0,incBorda=0;
+  const segsT=A.turnoSegs||[];
   let ultimoReg=null,primeiroReg=null,leituraIni=null,leituraFim=null;
   for(const e of A.eventos){
     if(e.t<pa||e.t>=pb)continue;
@@ -200,6 +203,10 @@ function metricas(A,a,b,prod){
       if(e.t<a)incAbsorvido+=e.delta;
       if(e.aposLacuna)incAposLacuna+=e.delta;
       if(e.naBorda)incBorda+=e.delta;
+      /* Produção registrada fora de qualquer turno cadastrado: entra no
+         numerador da base "turno" sem custar denominador — é o bônus das
+         caixas adiantadas pelo turno desconsiderado. */
+      if(segsT.length&&!dentroSegs(segsT,e.t))incForaTurno+=e.delta;
     }else if(e.delta>0)naoAtrib+=e.delta;
     if(e.delta===0)semAlt++;
     if(e.reset)resets++;
@@ -231,6 +238,13 @@ function metricas(A,a,b,prod){
     const abonoAte=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,a,ultimoReg),0);
     parcial=Math.max(0,(Math.min(ultimoReg,b)-a)/60000-abonoAte);
   }
+  /* Turno cadastrado: só os minutos do recorte que caem dentro de uma ocorrência
+     de turno cadastrada, já sem o turno desconsiderado. A produção feita fora
+     desse tempo — as caixas adiantadas pelo turno de limpeza — continua no
+     numerador, então entra como bônus e o indicador pode passar de 100%. */
+  const emTurno=ovlSegs(A.turnoSegs||[],a,b);
+  const abonoEmTurno=L.abonoSegs.reduce((s,g)=>s+ovlSegs(A.turnoSegs||[],g.a,g.b),0);
+  const turno=(A.turnoSegs&&A.turnoSegs.length)?Math.max(0,emTurno-abonoEmTurno):null;
   /* Marcações: da primeira à última marcação do contador. É a base que
      corresponde ao comportamento real da linha — a produção começa quando a
      primeira caixa é contada, não quando o relógio do filtro vira. */
@@ -239,7 +253,7 @@ function metricas(A,a,b,prod){
     const abonoEntre=L.abonoSegs.reduce((s,g)=>s+ovl(g.a,g.b,primeiroReg,ultimoReg),0);
     marcacoes=Math.max(0,(ultimoReg-primeiroReg)/60000-abonoEntre);
   }
-  const tempos={marcacoes,programado,observado,operacional,parcial};
+  const tempos={marcacoes,turno,programado,observado,operacional,parcial};
 
   const pcs=inc*pc;
   const bom=Math.max(0,pcs-L.refugo-L.retrab);
@@ -253,11 +267,12 @@ function metricas(A,a,b,prod){
   }
   const base=tempos[A.base]!==undefined?A.base:'marcacoes';
   return{a,b,pa,pb,dur,inc,incAbsorvido,pcsAbsorvido:incAbsorvido*pc,
+    incForaTurno,pcsForaTurno:incForaTurno*pc,
     regs,naoAtrib,incAposLacuna,incBorda,semAlt,resets,nPar,nLac,
     leituraIni,leituraFim,contagemInicial:c.offset||0,
     comDados,semDados,parado,abono,abonoCoberto,
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
-    marcacoes,programado,observado,operacional,parcial,tempos,
+    marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -351,6 +366,6 @@ function bucketsDe(gran,ini,fim,turnos,excluirId){
 }
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
-  pecas,ovl,unirSegs,ovlSegs,recortarSegs,inverterSegs,classificar,
+  pecas,ovl,unirSegs,ovlSegs,dentroSegs,recortarSegs,inverterSegs,classificar,
   NORMAL,PARADA,SEMDADOS,serieDePontos,analisarMaquina,lancDe,metricas,
   turnosNoIntervalo,bucketsDe};
