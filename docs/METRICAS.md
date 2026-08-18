@@ -14,6 +14,7 @@ refeitos na mão, estão em **[calculos.md](calculos.md)**.
 | Disponibilidade | tempo rodando ÷ tempo observado | |
 | Cobertura de dados | tempo com dados ÷ período | mede a confiança, não o desempenho |
 | Ritmo médio | peças ÷ tempo com dados (h) | |
+| Tempo de ciclo médio | tempo rodando (s) ÷ incrementos | desconta as paradas; comparado com o nominal do cadastro |
 | Intervalo entre incrementos | tempo com dados (s) ÷ incrementos | segundos por caixa |
 
 ## As bases de cálculo
@@ -23,6 +24,7 @@ Todo indicador que divide por tempo declara **contra o que** foi medido:
 | Base | Denominador | Responde a |
 | --- | --- | --- |
 | Da primeira à última marcação | última − primeira marcação − abono | quanto entregou enquanto esteve contando (**padrão**) |
+| Tempo cadastrado do turno | horas de turno no período − abono | quanto entregou do que a escala previa; produção fora de turno entra como bônus |
 | Período selecionado | período − abono | quanto entregou do que o relógio permitia |
 | Janela com dados | tempo com dados − abono | quanto entregou enquanto era observada |
 | Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |

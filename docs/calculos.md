@@ -167,6 +167,7 @@ E as quatro **bases de cálculo** derivadas, escolhidas no seletor da tela:
 
 ```
 marcacoes   = (última marcação − primeira marcação) − abono entre elas
+turno       = minutos do período dentro de turno cadastrado − abono nesses minutos
 programado  = período selecionado − abono
 observado   = tempo com dados − abono que cai dentro da cobertura
 operacional = observado − tempo parado
@@ -185,6 +186,7 @@ de meta, quando a linha contou das 05:00 às 14:00, mede o filtro e não a linha
 | Base | Responde a | Quando usar |
 | --- | --- | --- |
 | Da primeira à última marcação | “quanto a linha entregou enquanto esteve contando?” | **padrão** — é como a linha se comporta |
+| Tempo cadastrado do turno | “quanto a linha entregou do que o turno previa?” | fechamento contra a escala |
 | Período selecionado | “quanto a linha entregou do que o relógio permitia?” | fechamento oficial |
 | Janela com dados | “quanto ela entregou enquanto era observada?” | coleta incompleta |
 | Tempo rodando | “quanto ela entregou enquanto de fato rodava?” | isolar cadência de parada |
@@ -236,6 +238,7 @@ Quatro leituras, uma por base:
 | Indicador | Denominador |
 | --- | --- |
 | **OEE entre marcações** | capacidade × (última − primeira marcação) |
+| **OEE pelo turno cadastrado** | capacidade × horas de turno cadastrado no período |
 | **OEE programado** | capacidade × período selecionado (− abono) |
 | **OEE observado** | capacidade × tempo com dados (− abono) |
 | **OEE operacional** | capacidade × tempo rodando |
@@ -265,6 +268,34 @@ OEE programado = peças ÷ (120.000 × 500 ÷ 60)
 O parcial não pune por horas que ainda não aconteceram; o programado, sim. É por
 isso que os dois aparecem lado a lado na tabela de turno, com o status da linha
 dizendo se ela já fechou.
+
+### A base do turno cadastrado e o bônus das adiantadas
+
+Escolhendo **Tempo cadastrado do turno**, o denominador deixa de ser o relógio
+do filtro e passa a ser só o tempo previsto em escala: a soma das horas das
+ocorrências de turno cadastradas que caem no período, já **sem** o turno
+desconsiderado, menos abono.
+
+O numerador não muda — continua sendo toda a produção registrada no período.
+Consequência deliberada: a produção feita **fora** de qualquer turno cadastrado
+entra na conta sem custar denominador. É o bônus das caixas adiantadas.
+
+**Exemplo.** Dia inteiro, capacidade 20.000 peças/h, 3º turno de limpeza
+desconsiderado. Das 05:00 às 05:40 o pessoal da limpeza fecha 20 caixas; das
+06:00 às 14:00 o 1º turno fecha 160.
+
+```
+período selecionado        24h00   ->  OEE 37,5 %
+tempo cadastrado de turno  16h40   ->  OEE 54,0 %   (24h menos as 7h20 de limpeza)
+entre marcações             9h00   ->  OEE 100,0 %  (05:00 -> 14:00)
+
+das 180.000 peças, 20.000 foram produzidas fora de turno cadastrado
+e entram no numerador sem aparecer no denominador
+```
+
+Três leituras do mesmo dia, cada uma respondendo a uma pergunta diferente. Por
+isso a base aparece escrita no cartão, na tabela, no relatório e no CSV — e o
+cartão declara quantas peças entraram como bônus.
 
 **OEE líquido** troca as peças produzidas pela produção boa
 (`peças − refugo − retrabalho`) e só aparece quando há esses lançamentos.
