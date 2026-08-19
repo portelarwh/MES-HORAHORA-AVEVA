@@ -83,32 +83,52 @@ const chaveHora=ms=>{const d=new Date(ms);return iso(d)+'T'+pad2(d.getHours())};
 function horasDaJanela(ini,fim,metaHoras,padrao){
   const out=[];
   const d=new Date(ini);d.setMinutes(0,0,0);
+  const num=v=>Number.isFinite(v)&&v>0?v:null;
   for(let t=d.getTime();t<fim;t+=3600000){
     const info=(metaHoras&&metaHoras.get(chaveHora(t)))||padrao||null;
     out.push({a:t,b:t+3600000,
-      metaHora:info&&Number.isFinite(info.metaHora)&&info.metaHora>0?info.metaHora:null,
-      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null});
+      metaHora:info?num(info.metaHora):null,
+      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
+      familiaId:info?info.familiaId:null,familia:info?info.familia:null,
+      alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
+      vigencia:info?info.vigencia:null});
   }
   return out;
 }
-/* Média ponderada da meta e a lista de catálogos que o recorte atravessou. */
+/* Média ponderada da meta de peças e da meta de OEE, mais a lista de catálogos
+   e de famílias que o recorte atravessou. A meta de OEE é ponderada da mesma
+   forma que a de peças: um recorte que pega duas vigências fica com o alvo
+   proporcional aos minutos de cada uma. */
 function metaDoRecorte(horas,a,b){
-  let min=0,peso=0,semMeta=0;const usados=new Map();
+  let min=0,peso=0,semMeta=0;
+  let minOee=0,pesoAlvo=0,pesoAten=0;
+  const usados=new Map(),familias=new Map();
   for(const h of horas){
     if(h.b<=a)continue;
     if(h.a>=b)break;
     const m=ovl(h.a,h.b,a,b);
     if(m<=0)continue;
     min+=m;
+    if(h.alvoOee!=null){
+      minOee+=m;pesoAlvo+=m*h.alvoOee;pesoAten+=m*(h.atencaoOee!=null?h.atencaoOee:h.alvoOee);
+      const fk=h.familiaId||'_';
+      const fu=familias.get(fk)||{familiaId:h.familiaId,familia:h.familia,
+        alvoOee:h.alvoOee,atencaoOee:h.atencaoOee,vigencia:h.vigencia,min:0};
+      fu.min+=m;familias.set(fk,fu);
+    }
     if(h.metaHora==null){semMeta+=m;continue}
     peso+=m*h.metaHora;
     const k=h.catalogoId||'_';
-    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,metaHora:h.metaHora,min:0};
+    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,
+      familia:h.familia,metaHora:h.metaHora,min:0};
     u.min+=m;usados.set(k,u);
   }
   const comMeta=min-semMeta;
   return{metaEfetiva:comMeta>0?peso/comMeta:null,minutos:min,minutosSemMeta:semMeta,
-    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min)};
+    alvoOee:minOee>0?pesoAlvo/minOee:null,
+    atencaoOee:minOee>0?pesoAten/minOee:null,
+    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min),
+    familias:[...familias.values()].sort((x,y)=>y.min-x.min)};
 }
 
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
@@ -320,6 +340,7 @@ function metricas(A,a,b,prod){
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
     metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
+    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],

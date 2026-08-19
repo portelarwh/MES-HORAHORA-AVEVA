@@ -67,6 +67,7 @@ function aplicarPrefsNaTela(){
   $('a_lim').value=PREFS.limParada;$('a_limsd').value=PREFS.limSemDados;
   $('a_autoseg').value=PREFS.autoSeg;
   $('a_contagem').value=PREFS.contagem;
+  $('a_corpor').value=PREFS.corPor;
   ajudaCalculo();
 }
 
@@ -79,7 +80,7 @@ const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
   +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
 $('a_base').addEventListener('change',ajudaCalculo);
 $('a_contagem').addEventListener('change',ajudaCalculo);
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem']
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));

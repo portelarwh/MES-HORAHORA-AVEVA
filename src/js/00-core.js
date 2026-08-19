@@ -2,7 +2,7 @@
    segurança contra erro isolado. Formatação vive em 01-format.js. */
 "use strict";
 
-let MAQ=[],TUR=[],AJU=[],CAT=[],LAST=null,PRONTO=false;
+let MAQ=[],TUR=[],AJU=[],CAT=[],FAM=[],LAST=null,PRONTO=false;
 
 const $=i=>document.getElementById(i);
 const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};

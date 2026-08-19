@@ -5,10 +5,15 @@
 
 const periodoTxt=()=>dtBR(LAST.ini,'min')+' a '+dtBR(LAST.fim,'min');
 const semTags=s=>String(s).replace(/<[^>]+>/g,'');
-const corOEE=r=>r==null?'#8593A5':r>=.85?'#1B8A5A':r>=.7?'#B27300':'#C33C4E';
+/* No A4 as cores são fixas (papel não tem tema), mas os limites vêm da meta
+   de OEE vigente do período, igual à tela. */
+const corOEE=(r,t)=>{const c=t?clAlvo(r,t.alvoOee,t.atencaoOee):cl(r==null?null:r/.85);
+  return c==='g'?'#1B8A5A':c==='w'?'#B27300':c==='r'?'#C33C4E':'#8593A5'};
 const RODAPE_FORMULAS=()=>'OEE = peças ÷ (capacidade × base ÷ 60). Meta proporcional = meta × base ÷ 60. '
   +'Base desta emissão: '+rotuloBase(LAST.base)+' — '+descBase(LAST.base)+'. '
   +'Contagem: '+rotuloContagem(LAST.contagem)+'. '
+  +(LAST.AS[0]&&LAST.AS[0].tot.alvoOee!=null
+    ?'Meta de OEE vigente: '+fmtPct(LAST.AS[0].tot.alvoOee)+'. ':'')
   +'Tempo sem dados é ausência de registro e não é contado como parada.';
 
 function relatorioA4(){
@@ -19,7 +24,7 @@ function relatorioA4(){
     sem:s.sem+A.tot.semDados}),{pcs:0,plan:0,meta:0,par:0,npar:0,sem:0});
   const kpis=um?[
     ['Produção',nf(t0.pcs),'peças · '+nf(t0.inc)+' '+esc(c0.unid)+'s'],
-    ['OEE',fmtPct(t0.oeeBase),'de '+fmtVal(t0.planCapBase)+' planejadas'],
+    ['OEE',fmtPct(t0.oeeBase),t0.alvoOee!=null?'meta '+fmtPct(t0.alvoOee):'de '+fmtVal(t0.planCapBase)+' planejadas'],
     ['Atingimento',fmtPct(t0.atingBase),'meta '+fmtVal(t0.planMetaBase)],
     ['Base do cálculo',hDur(t0.tempoBase),rotuloBase(t0.base)],
     ['Cobertura',fmtPct(t0.cobertura),'sem dados '+hDur(t0.semDados)]
@@ -37,7 +42,7 @@ function relatorioA4(){
       +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td>`
         +`<td style="text-align:left;font-family:Inter,sans-serif">${l.status.rot}</td>`
         +`<td>${nf(l.pcs)}${l.incAbsorvido>0?' <small>(+'+nf(l.incAbsorvido)+')</small>':''}</td><td>${hDur(l.comDados)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase,l)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${fmtPct(l.oee.parcial)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td></td><td>${nf(t0.pcs)}</td><td>${hDur(t0.comDados)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${fmtPct(t0.oee.parcial)}</td></tr></tfoot></table>`;
@@ -47,7 +52,7 @@ function relatorioA4(){
       +'<th>OEE %</th><th>Sem dados</th><th>Parado</th></tr></thead><tbody>'
       +vis.map(l=>`<tr><td>${(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot}</td><td>${nf(l.pcs)}</td>`
         +`<td>${fmtPct(l.atingBase)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase,l)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${l.semDados>0?nf1(l.semDados):'—'}</td><td>${l.parado>0?nf1(l.parado):'—'}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td>${nf(t0.pcs)}</td><td>${fmtPct(t0.atingBase)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${nf1(t0.semDados)}</td><td>${nf1(t0.parado)}</td></tr></tfoot></table>`;
@@ -55,7 +60,7 @@ function relatorioA4(){
     esquerda='<h4>Comparativo por máquina</h4><table><thead><tr><th>Máquina</th><th>Peças</th><th>OEE %</th>'
       +'<th>Meta %</th><th>Cobertura</th><th>Parado</th></tr></thead><tbody>'
       +AS.map(A=>`<tr><td>${esc(A.maq.nome)}</td><td>${nf(A.tot.pcs)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(A.tot.oeeBase)}">${fmtPct(A.tot.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(A.tot.oeeBase,A.tot)}">${fmtPct(A.tot.oeeBase)}</td>`
         +`<td>${fmtPct(A.tot.atingBase)}</td><td>${fmtPct(A.tot.cobertura)}</td>`
         +`<td>${nf1(A.tot.parado)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td>${nf(sum.pcs)}</td><td>${pct(sum.pcs,sum.plan)}</td>`
@@ -118,7 +123,7 @@ function blocoRastro(A){
     +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
       +`<td>${fmtVal(t.planCap[['marcacoes','turno','programado','observado','operacional','parcial'][i]])}</td>`
-      +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
+      +`<td style="font-weight:700;color:${corOEE(e,t)}">${fmtPct(e)}</td></tr>`).join('')
     +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
     +`Leitura do contador ${fmtVal(t.leituraIni)} → ${fmtVal(t.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(t.contagemInicial)}). `
     +`Peças = ${nf(t.inc)} incrementos × ${nf(A.pc)} = ${nf(t.pcs)}. `
@@ -178,6 +183,9 @@ function textoEmail(){
     b+=`- Leitura do contador: ${fmtVal(x.leituraIni)} → ${fmtVal(x.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(x.contagemInicial)})\n`;
     if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
     if(x.incForaTurno>0)b+=`- Bônus: ${nf(x.pcsForaTurno)} peças produzidas fora de turno cadastrado, no numerador sem custar denominador\n`;
+    if(x.alvoOee!=null)
+      b+=`- Meta de OEE: ${fmtPct(x.alvoOee)} (atenção abaixo de ${fmtPct(x.atencaoOee)})`
+        +((x.familias||[]).length?` — ${x.familias.map(f=>(f.familia||'sem família')+(f.vigencia?' '+f.vigencia:'')).join('; ')}`:'')+`\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
     if((x.catalogos||[]).length)
       b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;

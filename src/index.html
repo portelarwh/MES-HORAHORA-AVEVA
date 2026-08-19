@@ -79,6 +79,11 @@
           <select id="a_borda"></select></div>
         <div class="fld" style="min-width:300px"><label for="a_contagem">Contagem dos incrementos</label>
           <select id="a_contagem"></select></div>
+        <div class="fld" style="min-width:230px"><label for="a_corpor">Colorir o gráfico por</label>
+          <select id="a_corpor">
+            <option value="oee">OEE contra a meta da família</option>
+            <option value="meta">Atingimento da meta de peças</option>
+          </select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
 
@@ -171,6 +176,14 @@
 </div>
 
 <div class="view" id="v_catalogos">
+  <section>
+    <h2>Famílias e meta de OEE</h2>
+    <p class="lede">Cada catálogo pertence a uma família, e é na família que mora a meta de OEE. Como essa meta muda
+      de tempos em tempos, ela é cadastrada por vigência: ao mudar a data da análise, a ferramenta usa a meta que
+      estava valendo naquela data, e as cores dos cartões e das barras acompanham.</p>
+    <div id="k_fam"></div>
+    <div class="acts"><button type="button" class="act pri" id="k_fam_novo">Cadastrar família</button></div>
+  </section>
   <section>
     <h2>Catálogos</h2>
     <p class="lede">Cada catálogo é um produto com a sua própria meta em peças por hora. A meta de uma hora é a do

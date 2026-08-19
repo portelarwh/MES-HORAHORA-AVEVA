@@ -21,6 +21,7 @@ const CARDS=[
   ['catalogo','Catálogo do período','Produção',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
+  ['metaoee','Meta de OEE','Desempenho',1],
   ['oeeprog','OEE programado','Desempenho',0],
   ['oeeobs','OEE observado','Desempenho',0],
   ['oeeoper','OEE operacional','Desempenho',0],
@@ -75,7 +76,7 @@ function prefsPadrao(){
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
   return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
-    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',auto:false,autoSeg:120,
+    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',corPor:'oee',auto:false,autoSeg:120,
     recolhidas:{},
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
@@ -95,6 +96,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
   if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
+  if(out.corPor!=='oee'&&out.corPor!=='meta')out.corPor=base.corPor;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;

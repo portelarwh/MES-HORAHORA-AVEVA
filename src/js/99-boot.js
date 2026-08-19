@@ -14,7 +14,7 @@
   const hoje=new Date();
   $('a_de').value=iso(new Date(hoje.getTime()-6*86400000));
   $('a_ate').value=iso(hoje);$('d_data').value=iso(hoje);
-  montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();
+  montarMaquinas();montarTurnos();montarDia();montarFamilias();montarCatalogos();montarAnalise();
   await montarDados();
   PRONTO=true;
   if(!MAQ.length){
