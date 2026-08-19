@@ -75,10 +75,16 @@ Quatro coleções no IndexedDB, banco `monitor-hh`, **versão 1**:
 maquinas    { id, nome, etapa, modo, porInc, unid, cap, meta, offset, catalogoId, cor, obs }
 turnos      { id, nome, inicio, fim }
 ajustes     { id, maquinaId, data, tipo, inicio, minutos, qtd, un, obs }
-catalogos   { id, numero, tipo, metaHora, obs }
+catalogos   { id, numero, tipo, familiaId, metaHora, obs }
+familias    { id, nome, obs, metas: [{ de, ate, alvo, atencao }] }
 dias        { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, pts: [[ms, valor], ...] }
 programacao { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, horas: { "6": catalogoId, ... } }
 ```
+
+**Migração 2 → 3.** Cria o store `familias`. Aditiva como a anterior. As metas
+de OEE ficam num array dentro do próprio registro da família, em vez de um store
+separado: a edição de uma família e das suas vigências vira uma escrita atômica,
+e a leitura não precisa de junção.
 
 **Migração 1 → 2.** Puramente aditiva: cria `catalogos` e `programacao`, e não
 toca em nenhum store existente, keyPath ou registro. Uma base da versão 1 abre

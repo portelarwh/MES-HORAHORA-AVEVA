@@ -30,6 +30,13 @@ Todo indicador que divide por tempo declara **contra o que** foi medido:
 | Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |
 | Até o último registro | última marcação − início do período | como está indo até agora |
 
+## Meta de OEE
+
+Mora na **família** do catálogo, com **vigência por período**. Cada hora resolve
+a própria meta pela data daquela hora. Verde acima da meta, âmbar entre atenção e
+meta, vermelho abaixo, **neutro sem meta cadastrada**. Um recorte que atravessa
+duas vigências usa a média ponderada pelos minutos.
+
 ## Catálogos
 
 A meta por hora vem do catálogo programado para ela; sem programação, do catálogo

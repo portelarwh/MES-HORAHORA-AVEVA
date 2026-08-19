@@ -3,6 +3,35 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [5.1.0] — 2026-08-18
+
+### Adicionado
+- **Famílias de catálogo com meta de OEE por vigência.** O catálogo passa a
+  pertencer a uma família, e é na família que mora a meta de OEE — cadastrada por
+  período, porque a meta muda de tempos em tempos e o histórico não pode ser
+  reescrito quando ela muda. Cada hora resolve a própria meta pela data daquela
+  hora: vale a vigência mais recente que já começou e ainda não terminou.
+- **As cores acompanham a meta vigente.** Cartões de OEE, pílulas das tabelas,
+  barras e pontos do gráfico e o relatório A4 passam a colorir contra a meta da
+  família em vez de um limiar fixo de 85%. Mudar a data da análise muda as cores
+  quando a vigência muda — o mesmo OEE de 66,7% fica verde contra uma meta de 40%
+  e vermelho contra uma de 90%.
+- Limite de **atenção** junto de cada meta: acima da meta é verde, entre atenção e
+  meta é âmbar, abaixo é vermelho. Em branco, assume 90% da meta.
+- Cartão **Meta de OEE**, com o alvo vigente, o limite de atenção e a família e o
+  período de onde vieram.
+- Seletor **Colorir o gráfico por**: OEE contra a meta da família (padrão) ou
+  atingimento da meta de peças. A legenda declara o critério e o valor da meta.
+- Validações `META-OEE` para período sem vigência cadastrada e para período que
+  atravessa metas diferentes.
+- Família, meta de OEE e limite de atenção nos CSV, no relatório e no e-mail.
+
+### Alterado
+- **IndexedDB migrado da versão 2 para a 3**, criando o store `familias`. Aditiva:
+  nenhum store existente, keyPath ou registro é tocado.
+- Sem meta de OEE cadastrada o indicador fica **neutro**, não reprovado. Antes,
+  todo OEE abaixo de 85% era vermelho por um limiar embutido no código.
+
 ## [5.0.0] — 2026-08-18
 
 ### Adicionado

@@ -240,6 +240,55 @@ puxam a meta efetiva para baixo, apenas não contribuem.
 A meta acompanha a base escolhida, então períodos parciais são comparáveis sem
 ajuste manual. Meia hora de análise cobra meia hora de meta.
 
+### Meta de OEE: família e vigência
+
+A meta de peças mora no **catálogo**. A meta de **OEE** mora um nível acima, na
+**família** a que o catálogo pertence — e com **vigência por período**, porque a
+meta de OEE muda de tempos em tempos e o histórico não pode ser reescrito quando
+ela muda.
+
+```
+catálogo  ──pertence a──>  família  ──tem──>  metas de OEE por vigência
+                                              [ de, até, meta, atenção ]
+```
+
+Cada hora resolve a própria meta pela **data daquela hora**: vale a vigência mais
+recente que já começou e ainda não terminou. `Até` em branco é vigência aberta.
+
+**Exemplo verificável.** Família Y com duas vigências — 01/08 a 20/08 com meta de
+40%, e a partir de 21/08 com meta de 90%. A mesma linha, produzindo exatamente o
+mesmo em dois dias:
+
+```
+17/08 : OEE 66,7 %   meta vigente 40 %   ->  verde
+24/08 : OEE 66,7 %   meta vigente 90 %   ->  vermelho
+```
+
+O OEE não mudou; a meta mudou. Mudar a data da análise é o suficiente para as
+cores dos cartões, das pílulas das tabelas e das barras do gráfico acompanharem.
+
+Quando o recorte atravessa duas vigências, a meta de OEE é a **média ponderada
+pelos minutos**, exatamente como a meta de peças. Cada hora isolada continua
+usando a sua própria.
+
+**Sem meta cadastrada o indicador fica neutro, não reprovado.** Um OEE sem meta
+de referência não é ruim — é apenas um número sem contra o que ser comparado.
+
+### Cores
+
+| Classe | Condição |
+| --- | --- |
+| Verde | valor ≥ meta |
+| Âmbar | meta > valor ≥ limite de atenção |
+| Vermelho | valor < limite de atenção |
+| Neutro | valor não calculável, ou nenhuma meta cadastrada |
+
+O limite de atenção é cadastrado junto da meta; em branco, assume 90% dela.
+
+O gráfico tem um seletor de critério: **OEE contra a meta da família** (padrão) ou
+**atingimento da meta de peças**. A legenda declara sempre contra o que as cores
+estão medindo, com o valor da meta vigente.
+
 ### Acumulado
 
 A tabela de detalhe por hora traz, além da hora isolada, o **acumulado do
