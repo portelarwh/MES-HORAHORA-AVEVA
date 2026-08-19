@@ -24,7 +24,10 @@ function grafico(cv,forcaW,forcaH){
      máquina a identidade fica no contorno, para não perder quem é quem. */
   const porMeta=secaoAtiva('corMeta');
   const COR={g:T.ok||'#1B8A5A',w:T.warn||'#B27300',r:T.bad||'#C33C4E',n:T.tx3};
-  const corDe=(A,i)=>porMeta?COR[cl(A.linhas[i].atingBase)]:A.maq.cor;
+  const classeDe=l=>PREFS.corPor==='oee'
+    ? clAlvo(l.oeeBase,l.alvoOee,l.atencaoOee)   // meta de OEE vigente da família
+    : cl(l.atingBase);                           // atingimento da meta de peças
+  const corDe=(A,i)=>porMeta?COR[classeDe(A.linhas[i])]:A.maq.cor;
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}

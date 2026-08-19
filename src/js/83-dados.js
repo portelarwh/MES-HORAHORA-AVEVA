@@ -14,7 +14,7 @@ async function montarDados(){
     if(r.data<o.min)o.min=r.data;if(r.data>o.max)o.max=r.data;}
   $('db_kpis').innerHTML=[
     ['Máquinas',nf(MAQ.length),'cadastradas','c'],['Turnos',nf(TUR.length),'cadastrados','c'],
-    ['Catálogos',nf(CAT.length),'cadastrados','o'],
+    ['Catálogos',nf(CAT.length),'cadastrados','o'],['Famílias',nf(FAM.length),'com meta de OEE','o'],
     ['Dias com dados',nf(all.length),'somando todas as máquinas','o'],
     ['Registros guardados',nf(pts),'pontos do contador','o']
   ].map(([k,v,u,x])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join('');
@@ -28,9 +28,10 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:5,dbVersao:DB_VER,exportado:new Date().toISOString(),
+  const bk={versao:6,dbVersao:DB_VER,exportado:new Date().toISOString(),
     maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
     ajustes:await getAll('ajustes'),catalogos:await getAll('catalogos'),
+    familias:await getAll('familias'),
     programacao:await getAll('programacao'),
     dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
@@ -47,6 +48,7 @@ $('db_file').addEventListener('change',e=>{
       for(const t of bk.turnos||[])await put('turnos',t);
       for(const j of bk.ajustes||[])await put('ajustes',j);
       for(const k of bk.catalogos||[])await put('catalogos',k);
+      for(const f of bk.familias||[])await put('familias',normalizaFamilia(f));
       /* mescla por hora: restaurar não apaga programação de horas ausentes no backup */
       for(const g of bk.programacao||[]){
         const ex=await get1('programacao',g.chave);
@@ -59,7 +61,7 @@ $('db_file').addEventListener('change',e=>{
         await put('dias',d);
       }
       if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
-      await recarregar();montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();montarDados();
+      await recarregar();montarMaquinas();montarTurnos();montarDia();montarFamilias();montarCatalogos();montarAnalise();montarDados();
       toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
     }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };

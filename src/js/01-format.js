@@ -68,7 +68,15 @@ const fmtVal=(v,f)=>v==null||!finito(v)?NAO_CALC:(f||nf)(v);
 /* Classe de cor por atingimento: g >= 100%, w >= 85%, r abaixo.
    null (não calculável) fica neutro. */
 const cl=a=>a==null||!finito(a)?'n':a>=1?'g':a>=.85?'w':'r';
+/* Classe de cor contra um alvo explícito — é o que a meta de OEE da família
+   usa. Sem alvo cadastrado o indicador fica neutro em vez de reprovado. */
+function clAlvo(v,alvo,atencao){
+  if(v==null||!finito(v)||!finito(alvo)||alvo<=0)return 'n';
+  if(v>=alvo)return 'g';
+  if(finito(atencao)&&atencao>0&&v>=atencao)return 'w';
+  return 'r';
+}
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
   NAO_CALC,finito,nf,nf1,nf2,pad2,pad3,hhmm,hhmmss,iso,brDate,ddmm,dtBR,dtCurto,
-  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl};
+  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl,clAlvo};

@@ -51,6 +51,7 @@ function guardarFiltros(){
   PREFS.limSemDados=+$('a_limsd').value||30;
   PREFS.borda=$('a_borda').value||'todos';
   PREFS.contagem=$('a_contagem').value||'tudo';
+  PREFS.corPor=$('a_corpor').value||'oee';
   salvarPrefs();
 }
 
@@ -97,7 +98,7 @@ async function rodarAnalise(opts){
     let dias=[];
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
-    const MM=await metaHorasDaMaquina(m,deK,ateK);
+    const MM=await metaHorasDaMaquina(m,deK,ateK,J.ini,J.fim);
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
       limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
       metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));

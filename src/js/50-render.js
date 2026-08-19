@@ -12,8 +12,11 @@ const plural=(n,u)=>nf(n)+' '+esc(u)+(n===1?'':'s');
 function cardsDe(A){
   const c=A.maq,t=A.tot,q=A.qual,u=nomeUnid(c),bs=rotuloBase(t.base);
   const eqInc=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(u)+' = '+nf(A.pc)+' peças';
+  /* A cor do OEE sai da meta da família vigente naquele período, não de um
+     limiar fixo. Sem meta cadastrada o cartão fica neutro em vez de reprovado. */
   const oeeCard=(id,tit,r,tempo,extra)=>[id,tit,fmtPct(r),
-    tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
+    tempo==null?'base não calculável':'base de '+hDur(tempo),
+    clAlvo(r,t.alvoOee,t.atencaoOee),extra];
   const bonusTurno=t.incForaTurno>0
     ? ' · '+nf(t.pcsForaTurno)+' peças produzidas fora de turno cadastrado entram como bônus' : '';
   const M={
@@ -56,7 +59,19 @@ function cardsDe(A){
       +((t.catalogos||[]).length>1?' · média ponderada de '+t.catalogos.length+' catálogos':'')],
     oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
       fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'
+      +(t.alvoOee!=null?' · meta de OEE '+fmtPct(t.alvoOee):' · sem meta de OEE cadastrada')
       +(t.base==='turno'?bonusTurno:'')),
+    /* Card próprio da meta de OEE: mostra o alvo vigente e de onde ele veio. */
+    metaoee:()=>{
+      const F=t.familias||[];
+      return['metaoee','Meta de OEE',fmtPct(t.alvoOee),
+        t.alvoOee==null?'nenhuma família com vigência no período'
+          :'atenção abaixo de '+fmtPct(t.atencaoOee),
+        clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee),
+        F.length?F.map(f=>esc(f.familia||'sem família')+' '+hDur(f.min)
+          +(f.vigencia?' · '+esc(f.vigencia):'')+' · '+fmtPct(f.alvoOee)).join(' | ')
+          :'cadastre a família do catálogo e a vigência da meta'];
+    },
     oeeprog:()=>oeeCard('oeeprog','OEE programado',t.oee.programado,t.programado,'período selecionado menos abono'),
     oeeobs:()=>oeeCard('oeeobs','OEE observado',t.oee.observado,t.observado,'só o tempo coberto por registros'),
     oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
@@ -121,6 +136,20 @@ function cardsHTML(A){
     +`<div class="v">${v}</div><div class="u">${u}</div>${e?`<div class="eq">${e}</div>`:''}</div>`).join('');
 }
 
+/* A legenda do gráfico diz contra o que as cores estão medindo — muda com o
+   critério escolhido e com a meta de OEE vigente no período. */
+function legendaCores(){
+  const t=LAST.AS[0]?LAST.AS[0].tot:null;
+  const porOee=PREFS.corPor==='oee';
+  const alvoTxt=porOee?(t&&t.alvoOee!=null?fmtPct(t.alvoOee):'sem meta'):'a meta de peças';
+  const atenTxt=porOee?(t&&t.atencaoOee!=null?fmtPct(t.atencaoOee):'—'):'85%';
+  return '<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
+    +'<span style="color:var(--tx3)">'+(porOee?'OEE contra':'atingimento de')+' '+esc(alvoTxt)+'</span>'
+    +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>atingiu</span>'
+    +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>a partir de '+esc(atenTxt)+'</span>'
+    +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo</span></span>';
+}
+
 function seta(atual,ant){
   if(ant==null||!Number.isFinite(ant)||ant===0)return '<span class="arw eq">'+NAO_CALC+'</span>';
   const d=(atual-ant)/ant*100;
@@ -128,6 +157,8 @@ function seta(atual,ant){
   return `<span class="arw ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${nf1(Math.abs(d))}%</span>`;
 }
 const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
+/* Pílula de OEE colorida contra a meta vigente do recorte. */
+const pillOee=(r,l)=>`<span class="pill p-${clAlvo(r,l.alvoOee,l.atencaoOee)}">${fmtPct(r)}</span>`;
 
 /* --- fechamento por turno ------------------------------------------------ */
 /* Duas janelas por linha: a produção pode vir de antes do turno (caixas
@@ -154,8 +185,8 @@ function tabelaTurnos(A){
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${l.incAbsorvido>0?nf(l.incAbsorvido):'—'}</td>`
       +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
-      +`<td class="sep">${pill(l.oee.marcacoes,.85)}</td><td>${pill(l.oee.programado,.85)}</td>`
-      +`<td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td class="sep">${pillOee(l.oee.marcacoes,l)}</td><td>${pillOee(l.oee.programado,l)}</td>`
+      +`<td>${pillOee(l.oee.observado,l)}</td><td>${pillOee(l.oee.parcial,l)}</td>`
       +`<td>${pill(l.atingBase)}</td>`
       +`<td>${fmtPct(l.cobertura)}</td></tr>`;
     T.inc+=l.inc;T.pcs+=l.pcs;T.ant+=l.incAbsorvido;T.dur+=l.dur;T.com+=l.comDados;
@@ -231,6 +262,12 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
+    ['Meta de OEE (família)',(t.familias||[]).length>1
+        ? 'média das metas vigentes ponderada pelos minutos'
+        : 'vigência da família na data do período',
+      (t.familias||[]).map(f=>esc(f.familia||'sem família')+' '+fmtPct(f.alvoOee)
+        +(f.vigencia?' ('+esc(f.vigencia)+')':'')).join(' + ')||NAO_CALC,
+      fmtPct(t.alvoOee)],
     ['Meta por hora (catálogo)',(t.catalogos||[]).length>1
         ? 'média das metas horárias ponderada pelos minutos'
         : 'meta do catálogo da hora',
@@ -285,10 +322,16 @@ function diagnosticos(){
       `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planMetaBase)}</b> da meta proporcional — <b>${fmtPct(t.atingBase)}</b>. `
       +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.tempoBase)} (${esc(bs)})`
       +(t.abono>0?`, já líquidos de ${nf1(t.abono)} min de abono.`:'.')]);
-    D.push([t.oeeBase==null?'info':t.oeeBase>=.85?'ok':t.oeeBase>=.7?'aten':'crit','OEE',mq,
-      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`,
+    const nvOee=t.oeeBase==null||t.alvoOee==null?'info'
+      :clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee)==='g'?'ok'
+      :clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee)==='w'?'aten':'crit';
+    D.push([nvOee,'OEE',mq,
+      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`
+        +(t.alvoOee!=null?` contra a meta de ${fmtPct(t.alvoOee)}`:''),
       `<b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planCapBase)}</b> planejadas pela capacidade `
       +`(${nf(c.cap)} peças/h × ${hDur(t.tempoBase)}). `
+      +(t.alvoOee!=null?`A meta de OEE vigente é <b>${fmtPct(t.alvoOee)}</b>`
+        +((t.familias||[]).length?` (${esc(t.familias[0].familia||'sem família')}${t.familias[0].vigencia?', '+esc(t.familias[0].vigencia):''})`:'')+'. ':'')
       +(t.planCapBase!=null?`A diferença de <b>${nf(t.planCapBase-t.pcs)}</b> peças é o total a recuperar.`:'')]);
     if(t.semDados>0)
       D.push([t.cobertura!=null&&t.cobertura<.85?'crit':'aten','SEM DADOS',mq,
@@ -402,10 +445,7 @@ function renderAnalise(){
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
     +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
     +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'')
-    +(secaoAtiva('corMeta')?'<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
-      +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>bateu a meta</span>'
-      +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>85% ou mais</span>'
-      +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo de 85%</span></span>':'');
+    +(secaoAtiva('corMeta')?legendaCores():'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 

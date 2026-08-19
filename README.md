@@ -29,7 +29,8 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Janela exata | Filtro por **data e horário** inicial e final. Todo cálculo respeita o intervalo escolhido, inclusive quando ele começa ou termina no meio da hora. |
 | Filtros rápidos | Turno atual, hoje, ontem, últimas 24 h, últimos 7 dias, este mês. |
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade, meta e o catálogo padrão. |
-| Catálogos | Cada produto tem número, tipo e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
+| Famílias e meta de OEE | Cada catálogo pertence a uma família, e é na família que mora a meta de OEE — cadastrada **por vigência**, porque a meta muda de tempos em tempos. Mudar a data da análise faz as cores de cartões, tabelas e barras acompanharem a meta que valia naquela data. |
+| Catálogos | Cada produto tem número, tipo, família e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
 | Acumulado | A tabela por hora mostra peças acumuladas, planejado acumulado, saldo e atingimento acumulado, além do desempenho da hora isolada. |
 | Gráfico por atingimento | Cada hora é colorida por ter batido ou não a meta daquela hora: verde bateu, âmbar 85% ou mais, vermelho abaixo. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
@@ -115,6 +116,25 @@ entram em [`docs/FORMATO-CSV.md`](docs/FORMATO-CSV.md).
 
 O resumo está abaixo; as fórmulas completas, com exemplos que podem ser refeitos
 na mão, estão em **[`docs/calculos.md`](docs/calculos.md)**.
+
+### Famílias e meta de OEE por vigência
+
+A meta de **peças** mora no catálogo. A meta de **OEE** mora na **família** a que
+o catálogo pertence, e é cadastrada por período de vigência. Cada hora resolve a
+própria meta pela data daquela hora: vale a vigência mais recente que já começou
+e ainda não terminou (`Até` em branco = vigência aberta).
+
+Exemplo: Família Y com meta de 40% até 20/08 e 90% a partir de 21/08. A mesma
+produção rende OEE de 66,7% nos dois dias — verde em 17/08, vermelho em 24/08.
+O indicador não mudou; a meta mudou.
+
+Junto da meta vai um **limite de atenção**: acima da meta é verde, entre atenção
+e meta é âmbar, abaixo é vermelho. Em branco, a atenção assume 90% da meta. Sem
+nenhuma meta cadastrada o indicador fica **neutro**, não reprovado — um OEE sem
+referência não é ruim, é apenas um número sem comparação.
+
+O gráfico tem um seletor: colorir por **OEE contra a meta da família** (padrão)
+ou por **atingimento da meta de peças**.
 
 ### Catálogos e meta por hora
 

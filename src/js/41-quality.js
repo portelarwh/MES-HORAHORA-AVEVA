@@ -88,6 +88,15 @@ function validacoes(A,t,ctx){
     add('info','DELTA','Incrementos maiores que 1 em '+nf(q.deltasMaiores)+' registros',
       'Registrados no carimbo real em que apareceram. Nenhum horário intermediário foi criado para distribuí-los.');
 
+  if(t.alvoOee==null&&t.regs)
+    add('aten','META-OEE','Sem meta de OEE vigente no período',
+      'O catálogo das horas analisadas não tem família com vigência cobrindo estas datas. '
+      +'O OEE continua sendo calculado, mas fica sem cor de referência: não há contra o que compará-lo.');
+  if((t.familias||[]).length>1)
+    add('info','META-OEE','O período atravessa '+t.familias.length+' metas de OEE diferentes',
+      t.familias.map(f=>(f.familia||'sem família')+' '+fmtPct(f.alvoOee)+' por '+hDur(f.min)).join(' · ')
+      +'. A meta do período é a média ponderada pelos minutos; cada hora usa a sua própria.');
+
   if(!(c.cap>0))
     add('crit','CAPACIDADE','Capacidade da máquina não cadastrada',
       'Sem capacidade em peças/h não há OEE. O indicador aparece como não calculável.');
