@@ -3,6 +3,16 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [5.3.1] — 2026-08-18
+
+### Corrigido
+- **Os controles de catálogo e lote estavam impossíveis de achar.** O cartão de
+  filtros da análise passou de 1.261 px de controles sem nenhuma separação
+  visual. Os dois viraram um bloco destacado, **“Catálogo e lote do período”**,
+  com borda, fundo próprio e um texto dizendo que também dá para editar hora a
+  hora nas colunas da tabela de detalhe. Os rótulos das demais seções do cartão
+  ganharam uma régua acima, para que o cartão deixe de ser um bloco único.
+
 ## [5.3.0] — 2026-08-18
 
 ### Adicionado
