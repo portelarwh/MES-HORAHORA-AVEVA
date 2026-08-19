@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v5.3.0 · build 2026-08-19 -->
+  <!-- MES Hora a Hora — AVEVA · v5.3.1 · build 2026-08-19 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -307,6 +307,20 @@ td.cat input.inpLote{width:120px;background:var(--card2);border:1px solid var(--
 td.cat input.inpLote:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 td.cat input.inpLote::placeholder{color:var(--tx3)}
 
+/* O cartão de filtros cresceu muito; sem separação visual nada é encontrado.
+   Os rótulos de seção ganham uma régua acima, e o bloco de programação
+   (catálogo e lote) fica destacado, porque é o que se edita com frequência. */
+.card>.sublbl{border-top:1px solid var(--line);padding-top:14px;margin-top:16px;
+  font-size:13px;font-weight:600;color:var(--tx)}
+.card>.sublbl:first-child{border-top:0;padding-top:0;margin-top:0}
+.bloco{border:1px solid var(--line2);background:var(--card2);border-radius:11px;
+  padding:15px 16px;margin:18px 0}
+.bloco-t{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:4px;
+  display:flex;align-items:center;gap:8px}
+.bloco-t::before{content:'';width:4px;height:15px;border-radius:2px;background:var(--accent)}
+.bloco-d{font-size:12.8px;color:var(--tx2);margin-bottom:13px;line-height:1.5}
+.bloco .note{background:var(--card);margin-top:12px}
+
   </style>
 </head>
 <body>
@@ -381,28 +395,29 @@ td.cat input.inpLote::placeholder{color:var(--tx3)}
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
 
-      <div class="sublbl">Catálogo do período</div>
-      <div class="bar-tools" style="margin-bottom:6px">
-        <div class="fld" style="min-width:330px"><label for="a_cat">Catálogo</label><select id="a_cat"></select></div>
-        <button type="button" class="act" id="a_cat_todas">Aplicar a todas as horas</button>
-        <button type="button" class="act dgr" id="a_cat_limpar">Limpar programação</button>
+      <div class="bloco" id="bl_prog">
+        <div class="bloco-t">Catálogo e lote do período</div>
+        <p class="bloco-d">O <b>catálogo</b> define a meta em peças por hora; o <b>lote</b> identifica a batelada.
+          Os dois valem por hora e podem ser aplicados ao período inteiro aqui, ou editados hora a hora nas colunas
+          <b>Catálogo</b> e <b>Lote</b> da tabela <b>Detalhe por hora</b>, mais abaixo.</p>
+        <div class="bar-tools" style="margin-bottom:10px">
+          <div class="fld" style="min-width:300px"><label for="a_cat">Catálogo</label><select id="a_cat"></select></div>
+          <button type="button" class="act" id="a_cat_todas">Aplicar a todas as horas</button>
+          <button type="button" class="act dgr" id="a_cat_limpar">Limpar programação</button>
+        </div>
+        <div class="bar-tools" style="margin-bottom:10px">
+          <div class="fld" style="min-width:300px"><label for="a_lote_novo">Lote</label>
+            <input type="text" id="a_lote_novo" placeholder="L-2291" autocomplete="off"></div>
+          <button type="button" class="act" id="a_lote_todas">Aplicar a todas as horas</button>
+          <button type="button" class="act dgr" id="a_lote_limpar">Limpar lotes</button>
+        </div>
+        <div class="bar-tools" style="margin-bottom:0">
+          <div class="fld" style="min-width:340px"><label for="a_lote">Filtrar por lote</label>
+            <select id="a_lote"></select></div>
+        </div>
+        <p class="note" id="a_loteinfo" style="margin-bottom:0">Ao filtrar por um lote, a análise passa a valer só
+          para o intervalo em que ele rodou — o período escolhido acima continua definindo onde procurar.</p>
       </div>
-      <p class="note" style="margin-top:0;margin-bottom:16px">Aplica o catálogo escolhido a todas as horas do período,
-        nas máquinas selecionadas. Para uma troca de catálogo no meio do processo, edite a hora diretamente na coluna
-        <b>Catálogo</b> da tabela <b>Detalhe por hora</b>.</p>
-
-      <div class="sublbl">Lote</div>
-      <div class="bar-tools" style="margin-bottom:6px">
-        <div class="fld" style="min-width:220px"><label for="a_lote_novo">Lote a aplicar</label>
-          <input type="text" id="a_lote_novo" placeholder="L-2291" autocomplete="off"></div>
-        <button type="button" class="act" id="a_lote_todas">Aplicar a todas as horas</button>
-        <button type="button" class="act dgr" id="a_lote_limpar">Limpar lotes</button>
-        <div class="fld" style="min-width:300px"><label for="a_lote">Filtrar por lote</label>
-          <select id="a_lote"></select></div>
-      </div>
-      <p class="note" id="a_loteinfo" style="margin-top:0;margin-bottom:16px">O lote é texto livre e vale por hora.
-        Ao filtrar por um lote, a análise passa a valer só para o intervalo em que ele rodou — o período escolhido
-        acima continua definindo onde procurar.</p>
 
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
