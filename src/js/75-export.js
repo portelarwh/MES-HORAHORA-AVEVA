@@ -25,13 +25,14 @@ const cabecalhoJanela=()=>[
   ['Contagem_dos_incrementos',rotuloContagem(LAST.contagem)],
   ['Limiar_parada_min',csvNum(LAST.lim,1)],['Limiar_sem_dados_min',csvNum(LAST.limSD,1)],
   ['Turno_desconsiderado',LAST.excl?(TUR.find(t=>t.id===LAST.excl)||{}).nome||LAST.excl:'nenhum'],
+  ['Filtro_de_lote',LAST.lote||'nenhum'],
   ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
 ];
 
 const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
   'Fora_de_turno_inc','Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
-  'Catalogos','Familias','Meta_OEE_%','Atencao_OEE_%','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
+  'Catalogos','Lotes','Familias','Meta_OEE_%','Atencao_OEE_%','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_turno_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Turno_cadastrado_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
@@ -40,6 +41,7 @@ const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
   nf0(l.incForaTurno),nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   (l.catalogos||[]).map(k=>k.numero||'sem catalogo').join(' + '),
+  (l.lotes||[]).map(k=>k.lote).join(' + '),
   (l.familias||[]).map(f=>f.familia||'sem familia').join(' + '),
   csvPct(l.alvoOee),csvPct(l.atencaoOee),csvNum(l.metaEfetiva,0),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),

@@ -31,6 +31,7 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade, meta e o catálogo padrão. |
 | Famílias e meta de OEE | Cada catálogo pertence a uma família, e é na família que mora a meta de OEE — cadastrada **por vigência**, porque a meta muda de tempos em tempos. Mudar a data da análise faz as cores de cartões, tabelas e barras acompanharem a meta que valia naquela data. |
 | Catálogos | Cada produto tem número, tipo, família, **cor** e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
+| Lote por hora | Cada hora aceita o lote corrente, em texto livre — aplicável ao período inteiro ou hora a hora. Filtrar por um lote recorta a análise ao intervalo em que ele rodou, sem mexer no período escolhido. |
 | Acumulado | A tabela por hora mostra peças acumuladas, planejado acumulado, saldo e atingimento acumulado, além do desempenho da hora isolada. |
 | Gráfico | Cada coluna mostra a produção acima e o OEE dentro dela. A cor segue o critério escolhido: OEE contra a meta da família, atingimento da meta de peças, ou a cor cadastrada no catálogo — útil quando cada tampa tem a sua cor. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
@@ -135,6 +136,22 @@ referência não é ruim, é apenas um número sem comparação.
 
 O gráfico tem um seletor: colorir por **OEE contra a meta da família** (padrão)
 ou por **atingimento da meta de peças**.
+
+### Lote e filtro por lote
+
+Ao lado do catálogo, cada hora aceita um **lote** em texto livre. Dá para aplicar
+um lote a todas as horas do período ou editar hora a hora, na coluna **Lote** da
+tabela de detalhe. O lote não entra em nenhuma conta — é identificação e recorte.
+
+Ao **filtrar por um lote**, a janela passa a ser o intervalo em que ele rodou: o
+período escolhido diz onde procurar, o lote diz onde olhar. Pedindo 24 h e
+filtrando um lote que rodou das 10h às 14h, a análise inteira — cartões, tabelas,
+gráfico e exportações — passa a valer para essas 4 h, e o resumo declara o
+recorte junto com o período original.
+
+Se o lote não foi contínuo, a janela ainda é um intervalo e as horas de outro
+lote que caírem no meio entram na conta. O painel de validação avisa, dizendo
+quais lotes são e por quanto tempo.
 
 ### Catálogos e meta por hora
 

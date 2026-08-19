@@ -3,6 +3,29 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [5.3.0] — 2026-08-18
+
+### Adicionado
+- **Lote por hora.** Cada hora aceita o lote corrente, em texto livre, gravado no
+  mesmo registro da programação do catálogo. Dá para aplicar um lote a todas as
+  horas do período ou editar hora a hora, na coluna **Lote** da tabela de detalhe.
+  Mudar o lote de uma hora não mexe no catálogo dela, e vice-versa.
+- **Filtro por lote.** O período escolhido diz onde procurar; o lote diz onde
+  olhar. Ao filtrar, a janela de análise passa a ser o intervalo em que aquele
+  lote rodou — pedindo 24 h e filtrando um lote das 10h às 14h, cartões, tabelas,
+  gráfico e exportações passam a valer para essas 4 h. O resumo declara o recorte
+  junto com o período original.
+- Cartão **Lote do período**, coluna de lote nos CSV e o lote no texto de e-mail.
+- Validação `LOTE`: avisa quando o período atravessa mais de um lote e, no modo
+  filtrado, quando o intervalo do lote contém horas de outro — o lote não foi
+  contínuo e os números incluem essas horas.
+
+### Notas
+- O lote não entra em nenhuma conta: não altera produção, meta nem OEE. É
+  identificação e recorte.
+- O campo foi acrescentado a um store existente, sem mudar a versão do banco.
+  Registros gravados antes simplesmente não o têm.
+
 ## [5.2.0] — 2026-08-18
 
 ### Adicionado

@@ -80,11 +80,15 @@ const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
   +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
 $('a_base').addEventListener('change',ajudaCalculo);
 $('a_contagem').addEventListener('change',ajudaCalculo);
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor']
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor','a_lote']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
 $('a_cat_todas').addEventListener('click',()=>aplicarCatalogoNoPeriodo($('a_cat').value));
+$('a_lote_todas').addEventListener('click',()=>aplicarLoteNoPeriodo($('a_lote_novo').value));
+$('a_lote_limpar').addEventListener('click',limparLotesDoPeriodo);
+$('a_lote_novo').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();aplicarLoteNoPeriodo($('a_lote_novo').value)}});
 $('a_cat_limpar').addEventListener('click',limparProgramacaoDoPeriodo);
 $('a_auto').addEventListener('change',e=>{
   if(e.target.checked)ligarAuto();

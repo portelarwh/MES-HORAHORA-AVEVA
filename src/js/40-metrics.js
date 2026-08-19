@@ -89,7 +89,7 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
     out.push({a:t,b:t+3600000,
       metaHora:info?num(info.metaHora):null,
       catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
-      cor:info?info.cor:null,
+      cor:info?info.cor:null,lote:info?info.lote:null,
       familiaId:info?info.familiaId:null,familia:info?info.familia:null,
       alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
       vigencia:info?info.vigencia:null});
@@ -103,13 +103,15 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
 function metaDoRecorte(horas,a,b){
   let min=0,peso=0,semMeta=0;
   let minOee=0,pesoAlvo=0,pesoAten=0;
-  const usados=new Map(),familias=new Map();
+  const usados=new Map(),familias=new Map(),lotes=new Map();
   for(const h of horas){
     if(h.b<=a)continue;
     if(h.a>=b)break;
     const m=ovl(h.a,h.b,a,b);
     if(m<=0)continue;
     min+=m;
+    if(h.lote){const u=lotes.get(h.lote)||{lote:h.lote,a:h.a,b:h.b,min:0};
+      u.a=Math.min(u.a,h.a);u.b=Math.max(u.b,h.b);u.min+=m;lotes.set(h.lote,u)}
     if(h.alvoOee!=null){
       minOee+=m;pesoAlvo+=m*h.alvoOee;pesoAten+=m*(h.atencaoOee!=null?h.atencaoOee:h.alvoOee);
       const fk=h.familiaId||'_';
@@ -129,7 +131,8 @@ function metaDoRecorte(horas,a,b){
     alvoOee:minOee>0?pesoAlvo/minOee:null,
     atencaoOee:minOee>0?pesoAten/minOee:null,
     catalogos:[...usados.values()].sort((x,y)=>y.min-x.min),
-    familias:[...familias.values()].sort((x,y)=>y.min-x.min)};
+    familias:[...familias.values()].sort((x,y)=>y.min-x.min),
+    lotes:[...lotes.values()].sort((x,y)=>x.a-y.a)};
 }
 
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
@@ -341,7 +344,7 @@ function metricas(A,a,b,prod){
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
     metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
-    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,
+    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,lotes:M.lotes,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],

@@ -98,6 +98,19 @@
         nas máquinas selecionadas. Para uma troca de catálogo no meio do processo, edite a hora diretamente na coluna
         <b>Catálogo</b> da tabela <b>Detalhe por hora</b>.</p>
 
+      <div class="sublbl">Lote</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <div class="fld" style="min-width:220px"><label for="a_lote_novo">Lote a aplicar</label>
+          <input type="text" id="a_lote_novo" placeholder="L-2291" autocomplete="off"></div>
+        <button type="button" class="act" id="a_lote_todas">Aplicar a todas as horas</button>
+        <button type="button" class="act dgr" id="a_lote_limpar">Limpar lotes</button>
+        <div class="fld" style="min-width:300px"><label for="a_lote">Filtrar por lote</label>
+          <select id="a_lote"></select></div>
+      </div>
+      <p class="note" id="a_loteinfo" style="margin-top:0;margin-bottom:16px">O lote é texto livre e vale por hora.
+        Ao filtrar por um lote, a análise passa a valer só para o intervalo em que ele rodou — o período escolhido
+        acima continua definindo onde procurar.</p>
+
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
       <div class="sublbl" style="margin-top:14px">Seções e camadas</div>
@@ -271,6 +284,7 @@
 <script src="js/82-lancamentos.js"></script>
 <script src="js/83-dados.js"></script>
 <script src="js/84-catalogos.js"></script>
+<script src="js/85-lotes.js"></script>
 <script src="js/90-montagem.js"></script>
 <script src="js/99-boot.js"></script>
 </body>

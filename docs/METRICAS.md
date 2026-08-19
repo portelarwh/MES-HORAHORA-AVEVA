@@ -37,6 +37,12 @@ a própria meta pela data daquela hora. Verde acima da meta, âmbar entre atenç
 meta, vermelho abaixo, **neutro sem meta cadastrada**. Um recorte que atravessa
 duas vigências usa a média ponderada pelos minutos.
 
+## Lote
+
+Texto livre por hora, gravado junto da programação do catálogo. Não entra em
+nenhuma conta. Filtrar por um lote recorta a janela ao intervalo em que ele
+rodou, dentro do período pedido.
+
 ## Catálogos
 
 A meta por hora vem do catálogo programado para ela; sem programação, do catálogo

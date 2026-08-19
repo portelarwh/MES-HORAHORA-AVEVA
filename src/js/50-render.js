@@ -39,6 +39,15 @@ function cardsDe(A){
     /* No cartão o carimbo vai até o segundo: os milissegundos que o historian
        grava só interessam na lista de registros, onde se confere marcação a
        marcação. */
+    lote:()=>{
+      const L=t.lotes||[];
+      return['lote','Lote do período',
+        L.length===0?NAO_CALC:L.length===1?esc(L[0].lote):L.length+' lotes',
+        L.length===0?'nenhuma hora com lote lançado'
+          :L.length===1?dtBR(L[0].a,'min')+' → '+dtBR(L[0].b,'min'):'em sequência no período','c',
+        L.length?L.map(k=>esc(k.lote)+' '+hDur(k.min)).join(' | ')
+          :'lance o lote na coluna Lote da tabela por hora, ou aplique ao período inteiro'];
+    },
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'s'),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -273,6 +282,9 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
+    ['Lote',(t.lotes||[]).length>1?'o período atravessa mais de um lote':'lote das horas do período',
+      (t.lotes||[]).map(k=>esc(k.lote)+' '+hDur(k.min)).join(' + ')||NAO_CALC,
+      (t.lotes||[]).length?(t.lotes.length===1?esc(t.lotes[0].lote):t.lotes.length+' lotes'):NAO_CALC],
     ['Meta de OEE (família)',(t.familias||[]).length>1
         ? 'média das metas vigentes ponderada pelos minutos'
         : 'vigência da família na data do período',
@@ -426,7 +438,9 @@ function renderAnalise(){
     dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
     +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
     +' · contagem: <b>'+esc(rotuloContagem(LAST.contagem))+'</b>'
-    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min','resumo');
+    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min'
+    +(LAST.lote?'<br><b>Filtrado pelo lote '+esc(LAST.lote)+'</b> — a janela foi recortada ao intervalo em que ele rodou, '
+      +'dentro do período pedido de '+dtBR(LAST.pedidoIni,'min')+' a '+dtBR(LAST.pedidoFim,'min')+'.':''),'resumo');
   for(const A of AS){
     const c=A.maq,h=el('div');
     h.innerHTML=`<h2 style="margin:16px 0 10px"><span class="swatch" style="background:${c.cor}"></span>${esc(c.nome)}`

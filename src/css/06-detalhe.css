@@ -58,3 +58,9 @@ table.vig td{padding:5px 6px}
 table.vig input{width:100%;background:var(--card2);border:1px solid var(--line2);color:var(--tx);
   font:inherit;font-size:13px;padding:6px 8px;border-radius:7px}
 table.vig{min-width:560px}
+
+/* Lote é texto livre, editado direto na linha da hora. */
+td.cat input.inpLote{width:120px;background:var(--card2);border:1px solid var(--line2);
+  color:var(--tx);font:inherit;font-size:13px;padding:5px 8px;border-radius:7px}
+td.cat input.inpLote:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+td.cat input.inpLote::placeholder{color:var(--tx3)}

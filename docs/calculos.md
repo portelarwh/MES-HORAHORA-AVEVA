@@ -314,12 +314,52 @@ período**: peças acumuladas, planejado acumulado (soma das metas horárias),
 saldo e atingimento acumulado. A soma das metas horárias fecha exatamente com a
 meta do período — é a mesma conta aplicada a recortes diferentes.
 
+### Lote
+
+Ao lado do catálogo, cada hora aceita um **lote** — texto livre, gravado no mesmo
+registro da programação. Ao contrário do catálogo, o lote não é pré-cadastrado:
+um lote novo aparece a cada batelada, e exigir cadastro antes seria atrito puro.
+A lista do filtro é derivada do que já foi lançado no período.
+
+O lote **não entra em nenhuma conta**. Ele não muda produção, meta nem OEE — é
+identificação e recorte. O que ele faz é permitir isolar a janela.
+
+### Filtro por lote
+
+O período escolhido diz **onde procurar**; o lote diz **onde olhar**. Ao filtrar
+por um lote, a janela de análise passa a ser o intervalo em que ele rodou:
+
+```
+da primeira hora com aquele lote  ->  ao fim da última hora com aquele lote
+                                      recortado no período pedido
+```
+
+**Exemplo verificável.** Período de 24 h com o lote L-2291 nas horas 00h–09h e
+14h–23h, e o L-2292 nas horas 10h–13h. Filtrando por L-2292:
+
+```
+período pedido : 17/08 00:00 -> 18/08 00:00   (24h00)
+janela do lote : 17/08 10:00 -> 17/08 14:00   ( 4h00)
+```
+
+Cartões, tabelas, gráfico e exportações passam a valer para essas 4 h. O resumo
+declara o recorte e o período original, para que ninguém leia o número achando
+que ele cobre o dia inteiro.
+
+**Lote descontínuo.** A janela é um intervalo, então se o lote parou e voltou, as
+horas de outro lote que caírem no meio entram na conta. O painel de validação
+avisa quando isso acontece, listando quais outros lotes estão dentro do intervalo
+e por quanto tempo — o número não é escondido, mas também não é apresentado como
+se fosse puro.
+
 ### Troca de catálogo no meio do processo
 
 No painel de análise, o seletor **Catálogo** aplica um catálogo a todas as horas
 do período, nas máquinas selecionadas. Para uma troca no meio do turno, a coluna
-**Catálogo** da tabela de detalhe por hora edita uma hora só. A programação fica
-gravada no IndexedDB, por máquina e por dia, e sobrevive ao recarregamento.
+**Catálogo** da tabela de detalhe por hora edita uma hora só. O lote funciona do
+mesmo jeito, na coluna **Lote**, com o campo e o botão próprios no painel. A
+programação fica gravada no IndexedDB, por máquina e por dia, e sobrevive ao
+recarregamento; mudar o lote de uma hora não mexe no catálogo dela, e vice-versa.
 
 **Exemplo.** Máquina com meta de 90.000 peças/h, período das 06:00 às 07:00,
 sem abono, base “período selecionado”:

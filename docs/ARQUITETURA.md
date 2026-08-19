@@ -78,7 +78,9 @@ ajustes     { id, maquinaId, data, tipo, inicio, minutos, qtd, un, obs }
 catalogos   { id, numero, tipo, familiaId, metaHora, obs }
 familias    { id, nome, obs, metas: [{ de, ate, alvo, atencao }] }
 dias        { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, pts: [[ms, valor], ...] }
-programacao { chave: "maquinaId|AAAA-MM-DD", maquinaId, data, horas: { "6": catalogoId, ... } }
+programacao { chave: "maquinaId|AAAA-MM-DD", maquinaId, data,
+              horas: { "6": catalogoId, ... },      // catálogo da hora
+              lotes: { "6": "L-2291", ... } }       // lote da hora, texto livre
 ```
 
 **Migração 2 → 3.** Cria o store `familias`. Aditiva como a anterior. As metas
@@ -92,6 +94,10 @@ na 2 com todos os dados intactos e os dois stores novos vazios — a meta cai no
 fallback do cadastro da máquina até que algum catálogo seja criado. A criação dos
 stores é idempotente, então vale igual para banco novo e para base migrada.
 Backups anteriores, sem os campos novos, são restaurados normalmente.
+
+O campo `lotes` foi acrescentado **sem mudar a versão do banco**: é um campo novo
+num store existente, e registros gravados antes dele simplesmente não o têm. Ler
+`p.lotes||{}` cobre os dois casos.
 
 `programacao` espelha o formato de `dias` de propósito: uma linha por máquina e
 dia, com o mapa de hora do dia para catálogo. Ler um intervalo continua sendo um

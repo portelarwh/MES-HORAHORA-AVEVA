@@ -210,21 +210,29 @@ const corCat=id=>{const c=catPorId(id);return c&&c.cor?c.cor:'transparent'};
 /* --- programação por hora ------------------------------------------------
    Uma linha por máquina e dia, com um mapa de hora do dia para catálogo.
    Mesmo formato de `dias`: ler um intervalo é um range da chave primária. */
-async function gravarHoras(maquinaId,alteracoes){
+/* Grava catálogo e/ou lote por hora. Só os campos presentes na alteração são
+   tocados: mudar o lote de uma hora não mexe no catálogo dela, e vice-versa. */
+async function gravarProgramacao(maquinaId,alteracoes){
   const porDia=new Map();
-  for(const {data,hora,catalogoId} of alteracoes){
-    if(!porDia.has(data))porDia.set(data,[]);
-    porDia.get(data).push([String(hora),catalogoId]);
+  for(const a of alteracoes){
+    if(!porDia.has(a.data))porDia.set(a.data,[]);
+    porDia.get(a.data).push(a);
   }
-  for(const [data,pares] of porDia){
+  for(const [data,itens] of porDia){
     const chave=chaveProg(maquinaId,data);
     const ex=await get1('programacao',chave);
-    const horas={...((ex&&ex.horas)||{})};
-    for(const [h,cid] of pares){if(cid)horas[h]=cid;else delete horas[h]}
-    if(Object.keys(horas).length)await put('programacao',{chave,maquinaId,data,horas});
+    const horas={...((ex&&ex.horas)||{})},lotes={...((ex&&ex.lotes)||{})};
+    for(const it of itens){
+      const h=String(it.hora);
+      if('catalogoId' in it){if(it.catalogoId)horas[h]=it.catalogoId;else delete horas[h]}
+      if('lote' in it){const v=String(it.lote||'').trim();if(v)lotes[h]=v;else delete lotes[h]}
+    }
+    if(Object.keys(horas).length||Object.keys(lotes).length)
+      await put('programacao',{chave,maquinaId,data,horas,lotes});
     else if(ex)await del('programacao',chave);
   }
 }
+const gravarHoras=(maquinaId,alteracoes)=>gravarProgramacao(maquinaId,alteracoes);
 /* Lista das horas de relógio que tocam [ini,fim). */
 function horasDoPeriodo(ini,fim){
   const out=[];const d=new Date(ini);d.setMinutes(0,0,0);
@@ -276,18 +284,17 @@ function infoDoCatalogo(cat,data,padraoOee){
     alvoOee:vig?vig.alvo:null,atencaoOee:vig?vig.atencao:null,
     vigencia:vig?brDate(vig.de)+' → '+(vig.ate?brDate(vig.ate):'em aberto'):null};
 }
-async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
+function metaHorasDaMaquina(maq,progs,ini,fim){
   const padraoCat=catPorId(maq.catalogoId);
   const semCat={metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
     catalogoId:null,numero:null,tipo:'meta da máquina',cor:null,
     familiaId:null,familia:null,alvoOee:null,atencaoOee:null,vigencia:null};
 
-  const porHora=new Map();
-  let progs=[];
-  try{progs=await programacaoDoIntervalo(maq.id,deK,ateK)}
-  catch(e){console.error('[monitor] programação não pôde ser lida',e)}
-  for(const p of progs)for(const [h,cid] of Object.entries(p.horas||{}))
-    porHora.set(p.data+'T'+pad2(h),cid);
+  const porHora=new Map(),loteHora=new Map();
+  for(const p of progs||[]){
+    for(const [h,cid] of Object.entries(p.horas||{}))porHora.set(p.data+'T'+pad2(h),cid);
+    for(const [h,lt] of Object.entries(p.lotes||{}))loteHora.set(p.data+'T'+pad2(h),lt);
+  }
 
   /* Resolve hora a hora: o catálogo pode ser o programado ou o padrão, e a
      vigência da meta de OEE depende da data daquela hora. */
@@ -297,7 +304,8 @@ async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
     const dia=new Date(t),data=iso(dia);
     const chave=data+'T'+pad2(dia.getHours());
     const cat=catPorId(porHora.get(chave))||padraoCat;
-    metaHoras.set(chave,cat?infoDoCatalogo(cat,data,semCat):{...semCat});
+    const base=cat?infoDoCatalogo(cat,data,semCat):{...semCat};
+    metaHoras.set(chave,{...base,lote:loteHora.get(chave)||null});
   }
   return{metaHoras,metaPadrao:semCat};
 }
