@@ -64,7 +64,7 @@ const CAB_REG='<thead><tr><th>Data e hora do registro</th><th>Contador</th><th>�
 function tabelaHoras(A,linhas){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Regs</th>'
+    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Lote</th><th rowspan="2">Regs</th>'
     +'<th class="grp" colspan="3">Produção</th>'
     +'<th class="grp" colspan="4">Acumulado no período</th>'
     +'<th class="grp" colspan="2">Desempenho da hora</th>'
@@ -89,6 +89,9 @@ function tabelaHoras(A,linhas){
       +`<span class="swatch" style="background:${esc(cat&&cat.cor?cat.cor:'transparent')};margin-right:6px"></span>`
       +`<select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
       +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
+      +`<td class="cat" style="text-align:left"><input class="inpLote" data-hora="${l.a}" `
+      +`value="${esc((l.lotes&&l.lotes[0]&&l.lotes[0].lote)||'')}" placeholder="—" `
+      +`autocomplete="off" title="Lote desta hora"></td>`
       +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${seta(l.pcs,ant)}</td>`
@@ -102,7 +105,7 @@ function tabelaHoras(A,linhas){
     ant=l.pcs;
   }
   const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td>${nf(t.regs)}</td>`
+  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td></td><td>${nf(t.regs)}</td>`
     +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td><td>${NAO_CALC}</td>`
     +`<td class="sep">${nf(t.pcs)}</td><td>${fmtVal(t.planMetaBase)}</td>`
     +`<td>${t.planMetaBase==null?NAO_CALC:(t.pcs-t.planMetaBase>=0?'+':'')+nf(t.pcs-t.planMetaBase)}</td>`
@@ -116,13 +119,20 @@ function tabelaHoras(A,linhas){
 /* Expansão: mostra apenas os registros dentro da janela daquela linha. */
 function ligarExpansao(tbl,A){
   tbl.addEventListener('click',e=>{
-    if(e.target.closest('.selCat'))return;          // o seletor de catálogo não expande a linha
+    if(e.target.closest('.selCat')||e.target.closest('.inpLote'))return;  // editar não expande a linha
     const tr=e.target.closest('tr.exp');if(!tr||!tbl.contains(tr))return;
     alternarExpansao(tr,A);
   });
   tbl.addEventListener('change',e=>{
-    const sel=e.target.closest('.selCat');if(!sel)return;
-    definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);
+    const sel=e.target.closest('.selCat');
+    if(sel){definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);return}
+    const lot=e.target.closest('.inpLote');
+    if(lot)definirLoteDaHora(A.maq.id,+lot.dataset.hora,lot.value);
+  });
+  /* Enter confirma sem esperar o blur — é como se digita uma coluna inteira. */
+  tbl.addEventListener('keydown',e=>{
+    const lot=e.target.closest('.inpLote');
+    if(lot&&e.key==='Enter'){e.preventDefault();lot.blur()}
   });
   tbl.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.key!==' ')return;

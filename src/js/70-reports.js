@@ -168,7 +168,9 @@ function textoEmail(){
     +`apurado a partir do contador do historian.\n\n`;
   b+=`JANELA E CRITÉRIO\nPeríodo: ${periodoTxt()}\nBase de cálculo: ${rotuloBase(LAST.base)} — ${descBase(LAST.base)}\n`;
   b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n`;
-  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n\n`;
+  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n`;
+  if(LAST.lote)b+=`Filtrado pelo lote ${LAST.lote} — janela recortada ao intervalo em que ele rodou\n`;
+  b+=`\n`;
   b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${fmtPct(oee)}\n`;
   b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${pct(sum.pcs,sum.meta)}\n\n`;
   for(const A of AS){
@@ -187,6 +189,8 @@ function textoEmail(){
       b+=`- Meta de OEE: ${fmtPct(x.alvoOee)} (atenção abaixo de ${fmtPct(x.atencaoOee)})`
         +((x.familias||[]).length?` — ${x.familias.map(f=>(f.familia||'sem família')+(f.vigencia?' '+f.vigencia:'')).join('; ')}`:'')+`\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    if((x.lotes||[]).length)
+      b+=`- Lote: ${x.lotes.map(k=>k.lote+' ('+hDur(k.min)+')').join('; ')}\n`;
     if((x.catalogos||[]).length)
       b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;
     b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças a ${fmtVal(x.metaEfetiva)} peças/h — atingimento ${fmtPct(x.atingBase)}\n`;

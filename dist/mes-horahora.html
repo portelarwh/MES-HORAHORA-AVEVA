@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v5.2.0 · build 2026-08-19 -->
+  <!-- MES Hora a Hora — AVEVA · v5.3.0 · build 2026-08-19 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -301,6 +301,12 @@ table.vig input{width:100%;background:var(--card2);border:1px solid var(--line2)
   font:inherit;font-size:13px;padding:6px 8px;border-radius:7px}
 table.vig{min-width:560px}
 
+/* Lote é texto livre, editado direto na linha da hora. */
+td.cat input.inpLote{width:120px;background:var(--card2);border:1px solid var(--line2);
+  color:var(--tx);font:inherit;font-size:13px;padding:5px 8px;border-radius:7px}
+td.cat input.inpLote:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+td.cat input.inpLote::placeholder{color:var(--tx3)}
+
   </style>
 </head>
 <body>
@@ -384,6 +390,19 @@ table.vig{min-width:560px}
       <p class="note" style="margin-top:0;margin-bottom:16px">Aplica o catálogo escolhido a todas as horas do período,
         nas máquinas selecionadas. Para uma troca de catálogo no meio do processo, edite a hora diretamente na coluna
         <b>Catálogo</b> da tabela <b>Detalhe por hora</b>.</p>
+
+      <div class="sublbl">Lote</div>
+      <div class="bar-tools" style="margin-bottom:6px">
+        <div class="fld" style="min-width:220px"><label for="a_lote_novo">Lote a aplicar</label>
+          <input type="text" id="a_lote_novo" placeholder="L-2291" autocomplete="off"></div>
+        <button type="button" class="act" id="a_lote_todas">Aplicar a todas as horas</button>
+        <button type="button" class="act dgr" id="a_lote_limpar">Limpar lotes</button>
+        <div class="fld" style="min-width:300px"><label for="a_lote">Filtrar por lote</label>
+          <select id="a_lote"></select></div>
+      </div>
+      <p class="note" id="a_loteinfo" style="margin-top:0;margin-bottom:16px">O lote é texto livre e vale por hora.
+        Ao filtrar por um lote, a análise passa a valer só para o intervalo em que ele rodou — o período escolhido
+        acima continua definindo onde procurar.</p>
 
       <div class="sublbl">Máquinas na comparação</div>
       <div class="opts" id="a_maqs"></div>
@@ -697,6 +716,7 @@ const CARDS=[
   ['dados','Tempo com dados','Período',1],
   ['semdados','Tempo sem dados','Período',1],
   ['catalogo','Catálogo do período','Produção',1],
+  ['lote','Lote do período','Produção',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
   ['metaoee','Meta de OEE','Desempenho',1],
@@ -754,7 +774,7 @@ function prefsPadrao(){
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
   return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
-    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',corPor:'oee',auto:false,autoSeg:120,
+    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',corPor:'oee',lote:'',auto:false,autoSeg:120,
     recolhidas:{},
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
@@ -775,6 +795,7 @@ function mesclaPrefs(base,salvo){
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
   if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
   if(!['oee','meta','catalogo'].includes(out.corPor))out.corPor=base.corPor;
+  out.lote=typeof out.lote==='string'?out.lote:'';
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
@@ -1089,7 +1110,7 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
     out.push({a:t,b:t+3600000,
       metaHora:info?num(info.metaHora):null,
       catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
-      cor:info?info.cor:null,
+      cor:info?info.cor:null,lote:info?info.lote:null,
       familiaId:info?info.familiaId:null,familia:info?info.familia:null,
       alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
       vigencia:info?info.vigencia:null});
@@ -1103,13 +1124,15 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
 function metaDoRecorte(horas,a,b){
   let min=0,peso=0,semMeta=0;
   let minOee=0,pesoAlvo=0,pesoAten=0;
-  const usados=new Map(),familias=new Map();
+  const usados=new Map(),familias=new Map(),lotes=new Map();
   for(const h of horas){
     if(h.b<=a)continue;
     if(h.a>=b)break;
     const m=ovl(h.a,h.b,a,b);
     if(m<=0)continue;
     min+=m;
+    if(h.lote){const u=lotes.get(h.lote)||{lote:h.lote,a:h.a,b:h.b,min:0};
+      u.a=Math.min(u.a,h.a);u.b=Math.max(u.b,h.b);u.min+=m;lotes.set(h.lote,u)}
     if(h.alvoOee!=null){
       minOee+=m;pesoAlvo+=m*h.alvoOee;pesoAten+=m*(h.atencaoOee!=null?h.atencaoOee:h.alvoOee);
       const fk=h.familiaId||'_';
@@ -1129,7 +1152,8 @@ function metaDoRecorte(horas,a,b){
     alvoOee:minOee>0?pesoAlvo/minOee:null,
     atencaoOee:minOee>0?pesoAten/minOee:null,
     catalogos:[...usados.values()].sort((x,y)=>y.min-x.min),
-    familias:[...familias.values()].sort((x,y)=>y.min-x.min)};
+    familias:[...familias.values()].sort((x,y)=>y.min-x.min),
+    lotes:[...lotes.values()].sort((x,y)=>x.a-y.a)};
 }
 
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
@@ -1341,7 +1365,7 @@ function metricas(A,a,b,prod){
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
     metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
-    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,
+    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,lotes:M.lotes,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -1530,6 +1554,16 @@ function validacoes(A,t,ctx){
     add('info','DELTA','Incrementos maiores que 1 em '+nf(q.deltasMaiores)+' registros',
       'Registrados no carimbo real em que apareceram. Nenhum horário intermediário foi criado para distribuí-los.');
 
+  if(ctx&&ctx.loteFiltro&&(t.lotes||[]).length>1)
+    add('aten','LOTE','O intervalo do lote '+ctx.loteFiltro+' contém horas de outro lote',
+      'A janela vai da primeira à última hora do lote filtrado, e nesse intervalo também rodaram: '
+      +t.lotes.filter(k=>k.lote!==ctx.loteFiltro).map(k=>k.lote+' ('+hDur(k.min)+')').join(', ')
+      +'. Os números incluem essas horas — o lote não foi contínuo.');
+  if(ctx&&!ctx.loteFiltro&&(t.lotes||[]).length>1)
+    add('info','LOTE','O período atravessa '+t.lotes.length+' lotes',
+      t.lotes.map(k=>k.lote+' '+hDur(k.min)).join(' · ')
+      +'. Use o filtro por lote para isolar um deles.');
+
   if(t.alvoOee==null&&t.regs)
     add('aten','META-OEE','Sem meta de OEE vigente no período',
       'O catálogo das horas analisadas não tem família com vigência cobrindo estas datas. '
@@ -1622,6 +1656,7 @@ function guardarFiltros(){
   PREFS.borda=$('a_borda').value||'todos';
   PREFS.contagem=$('a_contagem').value||'tudo';
   PREFS.corPor=$('a_corpor').value||'oee';
+  PREFS.lote=$('a_lote').value||'';
   salvarPrefs();
 }
 
@@ -1662,14 +1697,31 @@ async function rodarAnalise(opts){
      o posterior à janela classifiquem corretamente as bordas */
   const deK=isoDeMs(J.ini-86400000),ateK=isoDeMs(J.fim+86400000);
 
+  /* A programação é lida antes da análise porque o filtro de lote decide a
+     janela: o usuário escolhe onde procurar, o lote decide onde olhar. */
+  const maqs=sel.map(id=>MAQ.find(x=>x.id===id)).filter(Boolean);
+  const progs=[];
+  for(const m of maqs){
+    try{progs.push(await programacaoDoIntervalo(m.id,deK,ateK))}
+    catch(e){console.error('[monitor] programação não pôde ser lida',e);progs.push([])}
+  }
+  montarSeletorLote(lotesDaProgramacao(progs.flat(),J.ini,J.fim));
+  const loteFiltro=PREFS.lote||'';
+  let ini=J.ini,fim=J.fim,janelaLote=null;
+  if(loteFiltro){
+    janelaLote=janelaDoLote(progs,loteFiltro,J.ini,J.fim);
+    if(janelaLote){ini=janelaLote.ini;fim=janelaLote.fim}
+    else toast('O lote '+loteFiltro+' não tem horas lançadas neste período');
+  }
+
   const AS=[];
-  for(const id of sel){
-    const m=MAQ.find(x=>x.id===id);if(!m)continue;
+  for(let k=0;k<maqs.length;k++){
+    const m=maqs[k];
     let dias=[];
-    try{dias=await diasDoIntervalo(id,deK,ateK)}
+    try{dias=await diasDoIntervalo(m.id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
-    const MM=await metaHorasDaMaquina(m,deK,ateK,J.ini,J.fim);
-    AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
+    const MM=metaHorasDaMaquina(m,progs[k],ini,fim);
+    AS.push(analisarMaquina(m,dias,{ini,fim,limParadaMin:lim,
       limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
       metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));
   }
@@ -1677,18 +1729,18 @@ async function rodarAnalise(opts){
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
   $('a_vazio').style.display='none';
 
-  const BT=turnosNoIntervalo(TUR,J.ini,J.fim,excl);
+  const BT=turnosNoIntervalo(TUR,ini,fim,excl);
   /* Janelas de tempo dos turnos cadastrados, já sem o turno desconsiderado.
      É o denominador da base "Tempo cadastrado do turno". */
   const turnoSegs=unirSegs(BT.filter(t=>t.b>t.a).map(t=>({a:t.a,b:t.b})));
-  const B=bucketsDe(gran,J.ini,J.fim,TUR,excl);
-  const BH=bucketsDe('hora',J.ini,J.fim);
+  const B=bucketsDe(gran,ini,fim,TUR,excl);
+  const BH=bucketsDe('hora',ini,fim);
   const agora=Date.now();
-  const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length};
+  const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length,loteFiltro};
 
   for(const A of AS){
     A.turnoSegs=turnoSegs;
-    A.tot=metricas(A,J.ini,J.fim);
+    A.tot=metricas(A,ini,fim);
     A.linhas=B.map(bk=>({bk,...medir(A,bk)}));
     A.horas=BH.map(bk=>({bk,...medir(A,bk)}));
     A.turnos=BT.map(bk=>{const m=medir(A,bk);
@@ -1702,7 +1754,8 @@ async function rodarAnalise(opts){
   const nova=assinaturaDe(AS),mudou=nova!==ASSINATURA;
   ASSINATURA=nova;
   LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,contagem:PREFS.contagem,
-    ini:J.ini,fim:J.fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
+    lote:loteFiltro,janelaLote,pedidoIni:J.ini,pedidoFim:J.fim,
+    ini,fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
     geradoEm:new Date(),dadosMudaram:mudou};
   protegido('a análise',renderAnalise,()=>{$('a_out').innerHTML=
     '<div class="dg crit"><span class="lb">ERRO</span><div><div class="tt">A tela não pôde ser montada</div>'
@@ -1784,6 +1837,15 @@ function cardsDe(A){
     /* No cartão o carimbo vai até o segundo: os milissegundos que o historian
        grava só interessam na lista de registros, onde se confere marcação a
        marcação. */
+    lote:()=>{
+      const L=t.lotes||[];
+      return['lote','Lote do período',
+        L.length===0?NAO_CALC:L.length===1?esc(L[0].lote):L.length+' lotes',
+        L.length===0?'nenhuma hora com lote lançado'
+          :L.length===1?dtBR(L[0].a,'min')+' → '+dtBR(L[0].b,'min'):'em sequência no período','c',
+        L.length?L.map(k=>esc(k.lote)+' '+hDur(k.min)).join(' | ')
+          :'lance o lote na coluna Lote da tabela por hora, ou aplique ao período inteiro'];
+    },
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'s'),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -2018,6 +2080,9 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
+    ['Lote',(t.lotes||[]).length>1?'o período atravessa mais de um lote':'lote das horas do período',
+      (t.lotes||[]).map(k=>esc(k.lote)+' '+hDur(k.min)).join(' + ')||NAO_CALC,
+      (t.lotes||[]).length?(t.lotes.length===1?esc(t.lotes[0].lote):t.lotes.length+' lotes'):NAO_CALC],
     ['Meta de OEE (família)',(t.familias||[]).length>1
         ? 'média das metas vigentes ponderada pelos minutos'
         : 'vigência da família na data do período',
@@ -2171,7 +2236,9 @@ function renderAnalise(){
     dtBR(LAST.ini,'min')+' → '+dtBR(LAST.fim,'min')+' · '+hDur((LAST.fim-LAST.ini)/60000)
     +' · base de cálculo: <b>'+esc(rotuloBase(LAST.base))+'</b> ('+esc(descBase(LAST.base))+')'
     +' · contagem: <b>'+esc(rotuloContagem(LAST.contagem))+'</b>'
-    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min','resumo');
+    +' · parada acima de '+nf1(LAST.lim)+' min · sem dados acima de '+nf1(LAST.limSD)+' min'
+    +(LAST.lote?'<br><b>Filtrado pelo lote '+esc(LAST.lote)+'</b> — a janela foi recortada ao intervalo em que ele rodou, '
+      +'dentro do período pedido de '+dtBR(LAST.pedidoIni,'min')+' a '+dtBR(LAST.pedidoFim,'min')+'.':''),'resumo');
   for(const A of AS){
     const c=A.maq,h=el('div');
     h.innerHTML=`<h2 style="margin:16px 0 10px"><span class="swatch" style="background:${c.cor}"></span>${esc(c.nome)}`
@@ -2327,7 +2394,7 @@ const CAB_REG='<thead><tr><th>Data e hora do registro</th><th>Contador</th><th>�
 function tabelaHoras(A,linhas){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Regs</th>'
+    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Lote</th><th rowspan="2">Regs</th>'
     +'<th class="grp" colspan="3">Produção</th>'
     +'<th class="grp" colspan="4">Acumulado no período</th>'
     +'<th class="grp" colspan="2">Desempenho da hora</th>'
@@ -2352,6 +2419,9 @@ function tabelaHoras(A,linhas){
       +`<span class="swatch" style="background:${esc(cat&&cat.cor?cat.cor:'transparent')};margin-right:6px"></span>`
       +`<select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
       +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
+      +`<td class="cat" style="text-align:left"><input class="inpLote" data-hora="${l.a}" `
+      +`value="${esc((l.lotes&&l.lotes[0]&&l.lotes[0].lote)||'')}" placeholder="—" `
+      +`autocomplete="off" title="Lote desta hora"></td>`
       +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${seta(l.pcs,ant)}</td>`
@@ -2365,7 +2435,7 @@ function tabelaHoras(A,linhas){
     ant=l.pcs;
   }
   const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td>${nf(t.regs)}</td>`
+  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td></td><td>${nf(t.regs)}</td>`
     +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td><td>${NAO_CALC}</td>`
     +`<td class="sep">${nf(t.pcs)}</td><td>${fmtVal(t.planMetaBase)}</td>`
     +`<td>${t.planMetaBase==null?NAO_CALC:(t.pcs-t.planMetaBase>=0?'+':'')+nf(t.pcs-t.planMetaBase)}</td>`
@@ -2379,13 +2449,20 @@ function tabelaHoras(A,linhas){
 /* Expansão: mostra apenas os registros dentro da janela daquela linha. */
 function ligarExpansao(tbl,A){
   tbl.addEventListener('click',e=>{
-    if(e.target.closest('.selCat'))return;          // o seletor de catálogo não expande a linha
+    if(e.target.closest('.selCat')||e.target.closest('.inpLote'))return;  // editar não expande a linha
     const tr=e.target.closest('tr.exp');if(!tr||!tbl.contains(tr))return;
     alternarExpansao(tr,A);
   });
   tbl.addEventListener('change',e=>{
-    const sel=e.target.closest('.selCat');if(!sel)return;
-    definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);
+    const sel=e.target.closest('.selCat');
+    if(sel){definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);return}
+    const lot=e.target.closest('.inpLote');
+    if(lot)definirLoteDaHora(A.maq.id,+lot.dataset.hora,lot.value);
+  });
+  /* Enter confirma sem esperar o blur — é como se digita uma coluna inteira. */
+  tbl.addEventListener('keydown',e=>{
+    const lot=e.target.closest('.inpLote');
+    if(lot&&e.key==='Enter'){e.preventDefault();lot.blur()}
   });
   tbl.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.key!==' ')return;
@@ -2881,7 +2958,9 @@ function textoEmail(){
     +`apurado a partir do contador do historian.\n\n`;
   b+=`JANELA E CRITÉRIO\nPeríodo: ${periodoTxt()}\nBase de cálculo: ${rotuloBase(LAST.base)} — ${descBase(LAST.base)}\n`;
   b+=`Limiar de parada: ${nf1(LAST.lim)} min · limiar de ausência de dados: ${nf1(LAST.limSD)} min\n`;
-  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n\n`;
+  b+=`Contagem dos incrementos: ${rotuloContagem(LAST.contagem)}\n`;
+  if(LAST.lote)b+=`Filtrado pelo lote ${LAST.lote} — janela recortada ao intervalo em que ele rodou\n`;
+  b+=`\n`;
   b+=`RESUMO\nProdução: ${nf(sum.pcs)} peças\nPlanejado pela capacidade: ${nf(sum.plan)} peças\nOEE: ${fmtPct(oee)}\n`;
   b+=`Meta do período: ${nf(sum.meta)} peças — atingimento ${pct(sum.pcs,sum.meta)}\n\n`;
   for(const A of AS){
@@ -2900,6 +2979,8 @@ function textoEmail(){
       b+=`- Meta de OEE: ${fmtPct(x.alvoOee)} (atenção abaixo de ${fmtPct(x.atencaoOee)})`
         +((x.familias||[]).length?` — ${x.familias.map(f=>(f.familia||'sem família')+(f.vigencia?' '+f.vigencia:'')).join('; ')}`:'')+`\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
+    if((x.lotes||[]).length)
+      b+=`- Lote: ${x.lotes.map(k=>k.lote+' ('+hDur(k.min)+')').join('; ')}\n`;
     if((x.catalogos||[]).length)
       b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;
     b+=`- Meta proporcional (${rotuloBase(x.base)}): ${fmtVal(x.planMetaBase)} peças a ${fmtVal(x.metaEfetiva)} peças/h — atingimento ${fmtPct(x.atingBase)}\n`;
@@ -2981,13 +3062,14 @@ const cabecalhoJanela=()=>[
   ['Contagem_dos_incrementos',rotuloContagem(LAST.contagem)],
   ['Limiar_parada_min',csvNum(LAST.lim,1)],['Limiar_sem_dados_min',csvNum(LAST.limSD,1)],
   ['Turno_desconsiderado',LAST.excl?(TUR.find(t=>t.id===LAST.excl)||{}).nome||LAST.excl:'nenhum'],
+  ['Filtro_de_lote',LAST.lote||'nenhum'],
   ['Gerado_em',dtBR(LAST.geradoEm.getTime())],[]
 ];
 
 const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
   'Fora_de_turno_inc','Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
-  'Catalogos','Familias','Meta_OEE_%','Atencao_OEE_%','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
+  'Catalogos','Lotes','Familias','Meta_OEE_%','Atencao_OEE_%','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_turno_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Turno_cadastrado_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
@@ -2996,6 +3078,7 @@ const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
   nf0(l.incForaTurno),nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
   (l.catalogos||[]).map(k=>k.numero||'sem catalogo').join(' + '),
+  (l.lotes||[]).map(k=>k.lote).join(' + '),
   (l.familias||[]).map(f=>f.familia||'sem familia').join(' + '),
   csvPct(l.alvoOee),csvPct(l.atencaoOee),csvNum(l.metaEfetiva,0),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
@@ -3538,21 +3621,29 @@ const corCat=id=>{const c=catPorId(id);return c&&c.cor?c.cor:'transparent'};
 /* --- programação por hora ------------------------------------------------
    Uma linha por máquina e dia, com um mapa de hora do dia para catálogo.
    Mesmo formato de `dias`: ler um intervalo é um range da chave primária. */
-async function gravarHoras(maquinaId,alteracoes){
+/* Grava catálogo e/ou lote por hora. Só os campos presentes na alteração são
+   tocados: mudar o lote de uma hora não mexe no catálogo dela, e vice-versa. */
+async function gravarProgramacao(maquinaId,alteracoes){
   const porDia=new Map();
-  for(const {data,hora,catalogoId} of alteracoes){
-    if(!porDia.has(data))porDia.set(data,[]);
-    porDia.get(data).push([String(hora),catalogoId]);
+  for(const a of alteracoes){
+    if(!porDia.has(a.data))porDia.set(a.data,[]);
+    porDia.get(a.data).push(a);
   }
-  for(const [data,pares] of porDia){
+  for(const [data,itens] of porDia){
     const chave=chaveProg(maquinaId,data);
     const ex=await get1('programacao',chave);
-    const horas={...((ex&&ex.horas)||{})};
-    for(const [h,cid] of pares){if(cid)horas[h]=cid;else delete horas[h]}
-    if(Object.keys(horas).length)await put('programacao',{chave,maquinaId,data,horas});
+    const horas={...((ex&&ex.horas)||{})},lotes={...((ex&&ex.lotes)||{})};
+    for(const it of itens){
+      const h=String(it.hora);
+      if('catalogoId' in it){if(it.catalogoId)horas[h]=it.catalogoId;else delete horas[h]}
+      if('lote' in it){const v=String(it.lote||'').trim();if(v)lotes[h]=v;else delete lotes[h]}
+    }
+    if(Object.keys(horas).length||Object.keys(lotes).length)
+      await put('programacao',{chave,maquinaId,data,horas,lotes});
     else if(ex)await del('programacao',chave);
   }
 }
+const gravarHoras=(maquinaId,alteracoes)=>gravarProgramacao(maquinaId,alteracoes);
 /* Lista das horas de relógio que tocam [ini,fim). */
 function horasDoPeriodo(ini,fim){
   const out=[];const d=new Date(ini);d.setMinutes(0,0,0);
@@ -3604,18 +3695,17 @@ function infoDoCatalogo(cat,data,padraoOee){
     alvoOee:vig?vig.alvo:null,atencaoOee:vig?vig.atencao:null,
     vigencia:vig?brDate(vig.de)+' → '+(vig.ate?brDate(vig.ate):'em aberto'):null};
 }
-async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
+function metaHorasDaMaquina(maq,progs,ini,fim){
   const padraoCat=catPorId(maq.catalogoId);
   const semCat={metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
     catalogoId:null,numero:null,tipo:'meta da máquina',cor:null,
     familiaId:null,familia:null,alvoOee:null,atencaoOee:null,vigencia:null};
 
-  const porHora=new Map();
-  let progs=[];
-  try{progs=await programacaoDoIntervalo(maq.id,deK,ateK)}
-  catch(e){console.error('[monitor] programação não pôde ser lida',e)}
-  for(const p of progs)for(const [h,cid] of Object.entries(p.horas||{}))
-    porHora.set(p.data+'T'+pad2(h),cid);
+  const porHora=new Map(),loteHora=new Map();
+  for(const p of progs||[]){
+    for(const [h,cid] of Object.entries(p.horas||{}))porHora.set(p.data+'T'+pad2(h),cid);
+    for(const [h,lt] of Object.entries(p.lotes||{}))loteHora.set(p.data+'T'+pad2(h),lt);
+  }
 
   /* Resolve hora a hora: o catálogo pode ser o programado ou o padrão, e a
      vigência da meta de OEE depende da data daquela hora. */
@@ -3625,9 +3715,92 @@ async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
     const dia=new Date(t),data=iso(dia);
     const chave=data+'T'+pad2(dia.getHours());
     const cat=catPorId(porHora.get(chave))||padraoCat;
-    metaHoras.set(chave,cat?infoDoCatalogo(cat,data,semCat):{...semCat});
+    const base=cat?infoDoCatalogo(cat,data,semCat):{...semCat};
+    metaHoras.set(chave,{...base,lote:loteHora.get(chave)||null});
   }
   return{metaHoras,metaPadrao:semCat};
+}
+
+/* === 85-lotes.js === */
+/* 85-lotes.js — Lote por hora e o filtro que recorta a janela ao lote.
+
+   O lote é texto livre, gravado por máquina e hora no mesmo registro da
+   programação do catálogo. Ao contrário do catálogo, ele não é pré-cadastrado:
+   um lote novo aparece a cada batelada, e obrigar um cadastro antes seria
+   atrito puro. A lista do filtro é derivada do que já foi lançado no período. */
+"use strict";
+
+/* --- leitura ------------------------------------------------------------- */
+const chaveHoraMs=ms=>{const d=new Date(ms);return iso(d)+'T'+pad2(d.getHours())};
+
+/* Lotes distintos lançados no intervalo, com a janela que cada um ocupa. */
+function lotesDaProgramacao(progs,ini,fim){
+  const m=new Map();
+  for(const p of progs||[])for(const [h,lote] of Object.entries(p.lotes||{})){
+    const nome=String(lote||'').trim();if(!nome)continue;
+    const pd=p.data.split('-').map(Number);
+    const a=new Date(pd[0],pd[1]-1,pd[2],+h,0,0,0).getTime(),b=a+3600000;
+    if(b<=ini||a>=fim)continue;
+    const u=m.get(nome)||{lote:nome,a:Infinity,b:-Infinity,horas:0};
+    u.a=Math.min(u.a,a);u.b=Math.max(u.b,b);u.horas++;
+    m.set(nome,u);
+  }
+  return [...m.values()].sort((x,y)=>x.a-y.a);
+}
+/* Janela do lote: do início da primeira hora ao fim da última, recortada na
+   janela que o usuário pediu. É "o intervalo das bandejas daquele lote". */
+function janelaDoLote(progsPorMaquina,lote,ini,fim){
+  let a=Infinity,b=-Infinity,horas=0;
+  for(const progs of progsPorMaquina){
+    for(const L of lotesDaProgramacao(progs,ini,fim)){
+      if(L.lote!==lote)continue;
+      a=Math.min(a,L.a);b=Math.max(b,L.b);horas+=L.horas;
+    }
+  }
+  if(!horas)return null;
+  const ra=Math.max(a,ini),rb=Math.min(b,fim);
+  return rb>ra?{ini:ra,fim:rb,horas,lote}:null;
+}
+
+/* --- escrita ------------------------------------------------------------- */
+async function aplicarLoteNoPeriodo(lote){
+  if(!LAST){toast('Rode a análise primeiro');return}
+  const nome=String(lote||'').trim();
+  if(!nome){toast('Informe o lote');return}
+  const horas=horasDoPeriodo(LAST.ini,LAST.fim);
+  for(const A of LAST.AS)
+    await gravarProgramacao(A.maq.id,horas.map(h=>({data:h.data,hora:h.hora,lote:nome})));
+  await rodarAnalise();
+  toast('Lote '+nome+' aplicado a '+nf(horas.length)+' hora(s)');
+}
+async function limparLotesDoPeriodo(){
+  if(!LAST){toast('Rode a análise primeiro');return}
+  if(!confirm('Remover o lote de todas as horas do período?\n\nNenhum registro de produção é apagado.'))return;
+  const horas=horasDoPeriodo(LAST.ini,LAST.fim);
+  for(const A of LAST.AS)
+    await gravarProgramacao(A.maq.id,horas.map(h=>({data:h.data,hora:h.hora,lote:''})));
+  await rodarAnalise();
+  toast('Lotes do período removidos');
+}
+async function definirLoteDaHora(maquinaId,ms,lote){
+  const d=new Date(ms);
+  await gravarProgramacao(maquinaId,[{data:iso(d),hora:d.getHours(),lote}]);
+  await rodarAnalise();
+  toast(String(lote||'').trim()?'Lote das '+pad2(d.getHours())+'h atualizado'
+    :'Lote removido das '+pad2(d.getHours())+'h');
+}
+
+/* --- seletor do filtro ---------------------------------------------------- */
+/* Preenchido com o que existe no período, para não filtrar por um lote que
+   não está ali. Mantém a escolha atual quando ela continua disponível. */
+function montarSeletorLote(lotes){
+  const s=$('a_lote');if(!s)return;
+  const atual=s.value;
+  s.innerHTML='<option value="">— todos os lotes —</option>'
+    +(lotes||[]).map(L=>`<option value="${esc(L.lote)}">${esc(L.lote)} — ${L.horas} h · `
+      +`${hhmm(new Date(L.a))} às ${hhmm(new Date(L.b))}</option>`).join('');
+  s.value=[...s.options].some(o=>o.value===atual)?atual:'';
+  PREFS.lote=s.value;
 }
 
 /* === 90-montagem.js === */
@@ -3713,11 +3886,15 @@ const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
   +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
 $('a_base').addEventListener('change',ajudaCalculo);
 $('a_contagem').addEventListener('change',ajudaCalculo);
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor']
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor','a_lote']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
 $('a_cat_todas').addEventListener('click',()=>aplicarCatalogoNoPeriodo($('a_cat').value));
+$('a_lote_todas').addEventListener('click',()=>aplicarLoteNoPeriodo($('a_lote_novo').value));
+$('a_lote_limpar').addEventListener('click',limparLotesDoPeriodo);
+$('a_lote_novo').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){e.preventDefault();aplicarLoteNoPeriodo($('a_lote_novo').value)}});
 $('a_cat_limpar').addEventListener('click',limparProgramacaoDoPeriodo);
 $('a_auto').addEventListener('change',e=>{
   if(e.target.checked)ligarAuto();

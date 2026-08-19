@@ -52,6 +52,7 @@ function guardarFiltros(){
   PREFS.borda=$('a_borda').value||'todos';
   PREFS.contagem=$('a_contagem').value||'tudo';
   PREFS.corPor=$('a_corpor').value||'oee';
+  PREFS.lote=$('a_lote').value||'';
   salvarPrefs();
 }
 
@@ -92,14 +93,31 @@ async function rodarAnalise(opts){
      o posterior à janela classifiquem corretamente as bordas */
   const deK=isoDeMs(J.ini-86400000),ateK=isoDeMs(J.fim+86400000);
 
+  /* A programação é lida antes da análise porque o filtro de lote decide a
+     janela: o usuário escolhe onde procurar, o lote decide onde olhar. */
+  const maqs=sel.map(id=>MAQ.find(x=>x.id===id)).filter(Boolean);
+  const progs=[];
+  for(const m of maqs){
+    try{progs.push(await programacaoDoIntervalo(m.id,deK,ateK))}
+    catch(e){console.error('[monitor] programação não pôde ser lida',e);progs.push([])}
+  }
+  montarSeletorLote(lotesDaProgramacao(progs.flat(),J.ini,J.fim));
+  const loteFiltro=PREFS.lote||'';
+  let ini=J.ini,fim=J.fim,janelaLote=null;
+  if(loteFiltro){
+    janelaLote=janelaDoLote(progs,loteFiltro,J.ini,J.fim);
+    if(janelaLote){ini=janelaLote.ini;fim=janelaLote.fim}
+    else toast('O lote '+loteFiltro+' não tem horas lançadas neste período');
+  }
+
   const AS=[];
-  for(const id of sel){
-    const m=MAQ.find(x=>x.id===id);if(!m)continue;
+  for(let k=0;k<maqs.length;k++){
+    const m=maqs[k];
     let dias=[];
-    try{dias=await diasDoIntervalo(id,deK,ateK)}
+    try{dias=await diasDoIntervalo(m.id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
-    const MM=await metaHorasDaMaquina(m,deK,ateK,J.ini,J.fim);
-    AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
+    const MM=metaHorasDaMaquina(m,progs[k],ini,fim);
+    AS.push(analisarMaquina(m,dias,{ini,fim,limParadaMin:lim,
       limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
       metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));
   }
@@ -107,18 +125,18 @@ async function rodarAnalise(opts){
     $('a_vazio').textContent='Nenhuma das máquinas selecionadas existe mais no cadastro.';LAST=null;return}
   $('a_vazio').style.display='none';
 
-  const BT=turnosNoIntervalo(TUR,J.ini,J.fim,excl);
+  const BT=turnosNoIntervalo(TUR,ini,fim,excl);
   /* Janelas de tempo dos turnos cadastrados, já sem o turno desconsiderado.
      É o denominador da base "Tempo cadastrado do turno". */
   const turnoSegs=unirSegs(BT.filter(t=>t.b>t.a).map(t=>({a:t.a,b:t.b})));
-  const B=bucketsDe(gran,J.ini,J.fim,TUR,excl);
-  const BH=bucketsDe('hora',J.ini,J.fim);
+  const B=bucketsDe(gran,ini,fim,TUR,excl);
+  const BH=bucketsDe('hora',ini,fim);
   const agora=Date.now();
-  const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length};
+  const ctx={turnosSobrepostos:BT.some(t=>t.sobreposto),semTurnos:!TUR.length,loteFiltro};
 
   for(const A of AS){
     A.turnoSegs=turnoSegs;
-    A.tot=metricas(A,J.ini,J.fim);
+    A.tot=metricas(A,ini,fim);
     A.linhas=B.map(bk=>({bk,...medir(A,bk)}));
     A.horas=BH.map(bk=>({bk,...medir(A,bk)}));
     A.turnos=BT.map(bk=>{const m=medir(A,bk);
@@ -132,7 +150,8 @@ async function rodarAnalise(opts){
   const nova=assinaturaDe(AS),mudou=nova!==ASSINATURA;
   ASSINATURA=nova;
   LAST={AS,B,BT,BH,gran,base,lim,limSD,excl,agora,contagem:PREFS.contagem,
-    ini:J.ini,fim:J.fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
+    lote:loteFiltro,janelaLote,pedidoIni:J.ini,pedidoFim:J.fim,
+    ini,fim,de:J.de,ate:J.ate,hDe:J.hDe,hAte:J.hAte,
     geradoEm:new Date(),dadosMudaram:mudou};
   protegido('a análise',renderAnalise,()=>{$('a_out').innerHTML=
     '<div class="dg crit"><span class="lb">ERRO</span><div><div class="tt">A tela não pôde ser montada</div>'

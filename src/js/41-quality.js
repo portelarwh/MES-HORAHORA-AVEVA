@@ -88,6 +88,16 @@ function validacoes(A,t,ctx){
     add('info','DELTA','Incrementos maiores que 1 em '+nf(q.deltasMaiores)+' registros',
       'Registrados no carimbo real em que apareceram. Nenhum horário intermediário foi criado para distribuí-los.');
 
+  if(ctx&&ctx.loteFiltro&&(t.lotes||[]).length>1)
+    add('aten','LOTE','O intervalo do lote '+ctx.loteFiltro+' contém horas de outro lote',
+      'A janela vai da primeira à última hora do lote filtrado, e nesse intervalo também rodaram: '
+      +t.lotes.filter(k=>k.lote!==ctx.loteFiltro).map(k=>k.lote+' ('+hDur(k.min)+')').join(', ')
+      +'. Os números incluem essas horas — o lote não foi contínuo.');
+  if(ctx&&!ctx.loteFiltro&&(t.lotes||[]).length>1)
+    add('info','LOTE','O período atravessa '+t.lotes.length+' lotes',
+      t.lotes.map(k=>k.lote+' '+hDur(k.min)).join(' · ')
+      +'. Use o filtro por lote para isolar um deles.');
+
   if(t.alvoOee==null&&t.regs)
     add('aten','META-OEE','Sem meta de OEE vigente no período',
       'O catálogo das horas analisadas não tem família com vigência cobrindo estas datas. '
