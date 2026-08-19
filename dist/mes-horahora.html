@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v5.0.0 · build 2026-08-18 -->
+  <!-- MES Hora a Hora — AVEVA · v5.1.0 · build 2026-08-19 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -355,6 +355,11 @@ section[data-aberto="false"] h2{margin-bottom:0}
           <select id="a_borda"></select></div>
         <div class="fld" style="min-width:300px"><label for="a_contagem">Contagem dos incrementos</label>
           <select id="a_contagem"></select></div>
+        <div class="fld" style="min-width:230px"><label for="a_corpor">Colorir o gráfico por</label>
+          <select id="a_corpor">
+            <option value="oee">OEE contra a meta da família</option>
+            <option value="meta">Atingimento da meta de peças</option>
+          </select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
 
@@ -448,6 +453,14 @@ section[data-aberto="false"] h2{margin-bottom:0}
 
 <div class="view" id="v_catalogos">
   <section>
+    <h2>Famílias e meta de OEE</h2>
+    <p class="lede">Cada catálogo pertence a uma família, e é na família que mora a meta de OEE. Como essa meta muda
+      de tempos em tempos, ela é cadastrada por vigência: ao mudar a data da análise, a ferramenta usa a meta que
+      estava valendo naquela data, e as cores dos cartões e das barras acompanham.</p>
+    <div id="k_fam"></div>
+    <div class="acts"><button type="button" class="act pri" id="k_fam_novo">Cadastrar família</button></div>
+  </section>
+  <section>
     <h2>Catálogos</h2>
     <p class="lede">Cada catálogo é um produto com a sua própria meta em peças por hora. A meta de uma hora é a do
       catálogo programado para ela; sem programação, vale o catálogo padrão da máquina; sem catálogo padrão, a meta
@@ -520,7 +533,7 @@ section[data-aberto="false"] h2{margin-bottom:0}
    segurança contra erro isolado. Formatação vive em 01-format.js. */
 "use strict";
 
-let MAQ=[],TUR=[],AJU=[],CAT=[],LAST=null,PRONTO=false;
+let MAQ=[],TUR=[],AJU=[],CAT=[],FAM=[],LAST=null,PRONTO=false;
 
 const $=i=>document.getElementById(i);
 const el=(t,c)=>{const e=document.createElement(t);if(c)e.className=c;return e;};
@@ -637,10 +650,18 @@ const fmtVal=(v,f)=>v==null||!finito(v)?NAO_CALC:(f||nf)(v);
 /* Classe de cor por atingimento: g >= 100%, w >= 85%, r abaixo.
    null (não calculável) fica neutro. */
 const cl=a=>a==null||!finito(a)?'n':a>=1?'g':a>=.85?'w':'r';
+/* Classe de cor contra um alvo explícito — é o que a meta de OEE da família
+   usa. Sem alvo cadastrado o indicador fica neutro em vez de reprovado. */
+function clAlvo(v,alvo,atencao){
+  if(v==null||!finito(v)||!finito(alvo)||alvo<=0)return 'n';
+  if(v>=alvo)return 'g';
+  if(finito(atencao)&&atencao>0&&v>=atencao)return 'w';
+  return 'r';
+}
 
 if(typeof module!=='undefined'&&module.exports)module.exports={
   NAO_CALC,finito,nf,nf1,nf2,pad2,pad3,hhmm,hhmmss,iso,brDate,ddmm,dtBR,dtCurto,
-  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl};
+  hm,mh,hDur,fmtMin,fmtSeg,fmtIntervalo,razao,fmtPct,pct,fmtVal,cl,clAlvo};
 
 /* === 02-config.js === */
 /* 02-config.js — Preferências do usuário e catálogo do que pode ser exibido.
@@ -666,6 +687,7 @@ const CARDS=[
   ['catalogo','Catálogo do período','Produção',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
+  ['metaoee','Meta de OEE','Desempenho',1],
   ['oeeprog','OEE programado','Desempenho',0],
   ['oeeobs','OEE observado','Desempenho',0],
   ['oeeoper','OEE operacional','Desempenho',0],
@@ -720,7 +742,7 @@ function prefsPadrao(){
   for(const [k,,,d] of CARDS)cards[k]=!!d;
   for(const [k,,d] of OPCOES)secoes[k]=!!d;
   return{v:PREFS_VER,cards,secoes,base:'marcacoes',gran:'hora',tipo:'auto',
-    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',auto:false,autoSeg:120,
+    limParada:3,limSemDados:30,borda:'todos',contagem:'tudo',corPor:'oee',auto:false,autoSeg:120,
     recolhidas:{},
     hDe:'00:00',hAte:'00:00',regFiltro:'todos',regPag:200};
 }
@@ -740,6 +762,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
   if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
+  if(out.corPor!=='oee'&&out.corPor!=='meta')out.corPor=base.corPor;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
@@ -765,7 +788,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={
 /* === 10-db.js === */
 /* 10-db.js — Camada IndexedDB e normalização dos registros de máquina.
 
-   Banco `monitor-hh`, versão 2.
+   Banco `monitor-hh`, versão 3.
+
+   Migração 2 -> 3: cria o store `familias`, que guarda a família do catálogo e
+   as metas de OEE com vigência por período. Aditiva como a anterior.
 
    Migração 1 -> 2: cria os stores `catalogos` e `programacao`. É uma migração
    puramente aditiva — nenhum store existente é tocado, nenhum keyPath muda e
@@ -778,17 +804,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={
 "use strict";
 
 const DB={db:null};
-const DB_NOME='monitor-hh',DB_VER=2;
+const DB_NOME='monitor-hh',DB_VER=3;
 function abrir(){return new Promise((res,rej)=>{
   const r=indexedDB.open(DB_NOME,DB_VER);
   r.onupgradeneeded=e=>{
     const d=e.target.result,de=e.oldVersion;
     /* Criação idempotente: vale tanto para banco novo quanto para base v1. */
-    ['maquinas','turnos','ajustes','catalogos'].forEach(s=>{
+    ['maquinas','turnos','ajustes','catalogos','familias'].forEach(s=>{
       if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'})});
     ['dias','programacao'].forEach(s=>{
       if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'chave'})});
-    if(de&&de<2)console.info('[monitor] base migrada da versão '+de+' para '+DB_VER+' — nenhum registro alterado');
+    if(de&&de<DB_VER)console.info('[monitor] base migrada da versão '+de+' para '+DB_VER+' — nenhum registro alterado');
   };
   r.onsuccess=e=>{DB.db=e.target.result;res()};
   r.onerror=()=>rej(r.error);
@@ -818,6 +844,15 @@ function programacaoDoIntervalo(maquinaId,de,ate){
 }
 const chaveProg=(maquinaId,data)=>maquinaId+'|'+data;
 
+/* Uma família guarda as metas de OEE com vigência: [{de, ate, alvo, atencao}].
+   `ate` vazio significa vigência aberta, sem data de fim. */
+function normalizaFamilia(f){
+  f.metas=(Array.isArray(f.metas)?f.metas:[])
+    .filter(v=>v&&v.de)
+    .map(v=>({de:v.de,ate:v.ate||'',alvo:+v.alvo||0,atencao:+v.atencao||0}))
+    .sort((a,b)=>a.de.localeCompare(b.de));
+  return f;
+}
 function normaliza(m){
   if(m.porInc===undefined){m.porInc=m.tubos||1;m.modo=(m.tubos&&m.tubos>1)?'lote':'unidade'}
   if(!m.modo)m.modo='lote';
@@ -827,6 +862,7 @@ function normaliza(m){
 async function recarregar(){
   MAQ=(await getAll('maquinas')).map(normaliza).sort((a,b)=>a.nome.localeCompare(b.nome));
   CAT=(await getAll('catalogos')).sort((a,b)=>String(a.numero).localeCompare(String(b.numero),'pt-BR',{numeric:true}));
+  FAM=(await getAll('familias')).map(normalizaFamilia).sort((a,b)=>a.nome.localeCompare(b.nome));
   TUR=(await getAll('turnos')).sort((a,b)=>hm(a.inicio)-hm(b.inicio));
   AJU=(await getAll('ajustes')).sort((a,b)=>(b.data+(b.inicio||'')).localeCompare(a.data+(a.inicio||'')));
   $('c_maq').textContent=MAQ.length;$('c_tur').textContent=TUR.length;
@@ -1035,32 +1071,52 @@ const chaveHora=ms=>{const d=new Date(ms);return iso(d)+'T'+pad2(d.getHours())};
 function horasDaJanela(ini,fim,metaHoras,padrao){
   const out=[];
   const d=new Date(ini);d.setMinutes(0,0,0);
+  const num=v=>Number.isFinite(v)&&v>0?v:null;
   for(let t=d.getTime();t<fim;t+=3600000){
     const info=(metaHoras&&metaHoras.get(chaveHora(t)))||padrao||null;
     out.push({a:t,b:t+3600000,
-      metaHora:info&&Number.isFinite(info.metaHora)&&info.metaHora>0?info.metaHora:null,
-      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null});
+      metaHora:info?num(info.metaHora):null,
+      catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
+      familiaId:info?info.familiaId:null,familia:info?info.familia:null,
+      alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
+      vigencia:info?info.vigencia:null});
   }
   return out;
 }
-/* Média ponderada da meta e a lista de catálogos que o recorte atravessou. */
+/* Média ponderada da meta de peças e da meta de OEE, mais a lista de catálogos
+   e de famílias que o recorte atravessou. A meta de OEE é ponderada da mesma
+   forma que a de peças: um recorte que pega duas vigências fica com o alvo
+   proporcional aos minutos de cada uma. */
 function metaDoRecorte(horas,a,b){
-  let min=0,peso=0,semMeta=0;const usados=new Map();
+  let min=0,peso=0,semMeta=0;
+  let minOee=0,pesoAlvo=0,pesoAten=0;
+  const usados=new Map(),familias=new Map();
   for(const h of horas){
     if(h.b<=a)continue;
     if(h.a>=b)break;
     const m=ovl(h.a,h.b,a,b);
     if(m<=0)continue;
     min+=m;
+    if(h.alvoOee!=null){
+      minOee+=m;pesoAlvo+=m*h.alvoOee;pesoAten+=m*(h.atencaoOee!=null?h.atencaoOee:h.alvoOee);
+      const fk=h.familiaId||'_';
+      const fu=familias.get(fk)||{familiaId:h.familiaId,familia:h.familia,
+        alvoOee:h.alvoOee,atencaoOee:h.atencaoOee,vigencia:h.vigencia,min:0};
+      fu.min+=m;familias.set(fk,fu);
+    }
     if(h.metaHora==null){semMeta+=m;continue}
     peso+=m*h.metaHora;
     const k=h.catalogoId||'_';
-    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,metaHora:h.metaHora,min:0};
+    const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,
+      familia:h.familia,metaHora:h.metaHora,min:0};
     u.min+=m;usados.set(k,u);
   }
   const comMeta=min-semMeta;
   return{metaEfetiva:comMeta>0?peso/comMeta:null,minutos:min,minutosSemMeta:semMeta,
-    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min)};
+    alvoOee:minOee>0?pesoAlvo/minOee:null,
+    atencaoOee:minOee>0?pesoAten/minOee:null,
+    catalogos:[...usados.values()].sort((x,y)=>y.min-x.min),
+    familias:[...familias.values()].sort((x,y)=>y.min-x.min)};
 }
 
 /* --- análise de uma máquina dentro da janela exata ----------------------- */
@@ -1272,6 +1328,7 @@ function metricas(A,a,b,prod){
     extra:L.extra,paradaJust:L.paradaJust,refugo:L.refugo,retrab:L.retrab,motivos:L.motivos,
     marcacoes,turno,emTurno,programado,observado,operacional,parcial,tempos,
     metaEfetiva,catalogos:M.catalogos,minutosSemMeta:M.minutosSemMeta,
+    alvoOee:M.alvoOee,atencaoOee:M.atencaoOee,familias:M.familias,
     primeiroReg,ultimoReg,pcs,bom,planCap,planMeta,oee,ating,
     base,oeeBase:oee[base],atingBase:ating[base],
     planCapBase:planCap[base],planMetaBase:planMeta[base],tempoBase:tempos[base],
@@ -1460,6 +1517,15 @@ function validacoes(A,t,ctx){
     add('info','DELTA','Incrementos maiores que 1 em '+nf(q.deltasMaiores)+' registros',
       'Registrados no carimbo real em que apareceram. Nenhum horário intermediário foi criado para distribuí-los.');
 
+  if(t.alvoOee==null&&t.regs)
+    add('aten','META-OEE','Sem meta de OEE vigente no período',
+      'O catálogo das horas analisadas não tem família com vigência cobrindo estas datas. '
+      +'O OEE continua sendo calculado, mas fica sem cor de referência: não há contra o que compará-lo.');
+  if((t.familias||[]).length>1)
+    add('info','META-OEE','O período atravessa '+t.familias.length+' metas de OEE diferentes',
+      t.familias.map(f=>(f.familia||'sem família')+' '+fmtPct(f.alvoOee)+' por '+hDur(f.min)).join(' · ')
+      +'. A meta do período é a média ponderada pelos minutos; cada hora usa a sua própria.');
+
   if(!(c.cap>0))
     add('crit','CAPACIDADE','Capacidade da máquina não cadastrada',
       'Sem capacidade em peças/h não há OEE. O indicador aparece como não calculável.');
@@ -1542,6 +1608,7 @@ function guardarFiltros(){
   PREFS.limSemDados=+$('a_limsd').value||30;
   PREFS.borda=$('a_borda').value||'todos';
   PREFS.contagem=$('a_contagem').value||'tudo';
+  PREFS.corPor=$('a_corpor').value||'oee';
   salvarPrefs();
 }
 
@@ -1588,7 +1655,7 @@ async function rodarAnalise(opts){
     let dias=[];
     try{dias=await diasDoIntervalo(id,deK,ateK)}
     catch(e){console.error('[monitor] leitura da base falhou',e);toast('Falha ao ler a base local')}
-    const MM=await metaHorasDaMaquina(m,deK,ateK);
+    const MM=await metaHorasDaMaquina(m,deK,ateK,J.ini,J.fim);
     AS.push(analisarMaquina(m,dias,{ini:J.ini,fim:J.fim,limParadaMin:lim,
       limSemDadosMin:limSD,ajustes:AJU,base,contagem:PREFS.contagem,
       metaHoras:MM.metaHoras,metaPadrao:MM.metaPadrao}));
@@ -1677,8 +1744,11 @@ const plural=(n,u)=>nf(n)+' '+esc(u)+(n===1?'':'s');
 function cardsDe(A){
   const c=A.maq,t=A.tot,q=A.qual,u=nomeUnid(c),bs=rotuloBase(t.base);
   const eqInc=c.modo==='unidade'?'1 incremento = 1 peça':'1 '+esc(u)+' = '+nf(A.pc)+' peças';
+  /* A cor do OEE sai da meta da família vigente naquele período, não de um
+     limiar fixo. Sem meta cadastrada o cartão fica neutro em vez de reprovado. */
   const oeeCard=(id,tit,r,tempo,extra)=>[id,tit,fmtPct(r),
-    tempo==null?'base não calculável':'base de '+hDur(tempo),cl(alvo(r,.85)),extra];
+    tempo==null?'base não calculável':'base de '+hDur(tempo),
+    clAlvo(r,t.alvoOee,t.atencaoOee),extra];
   const bonusTurno=t.incForaTurno>0
     ? ' · '+nf(t.pcsForaTurno)+' peças produzidas fora de turno cadastrado entram como bônus' : '';
   const M={
@@ -1721,7 +1791,19 @@ function cardsDe(A){
       +((t.catalogos||[]).length>1?' · média ponderada de '+t.catalogos.length+' catálogos':'')],
     oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
       fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'
+      +(t.alvoOee!=null?' · meta de OEE '+fmtPct(t.alvoOee):' · sem meta de OEE cadastrada')
       +(t.base==='turno'?bonusTurno:'')),
+    /* Card próprio da meta de OEE: mostra o alvo vigente e de onde ele veio. */
+    metaoee:()=>{
+      const F=t.familias||[];
+      return['metaoee','Meta de OEE',fmtPct(t.alvoOee),
+        t.alvoOee==null?'nenhuma família com vigência no período'
+          :'atenção abaixo de '+fmtPct(t.atencaoOee),
+        clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee),
+        F.length?F.map(f=>esc(f.familia||'sem família')+' '+hDur(f.min)
+          +(f.vigencia?' · '+esc(f.vigencia):'')+' · '+fmtPct(f.alvoOee)).join(' | ')
+          :'cadastre a família do catálogo e a vigência da meta'];
+    },
     oeeprog:()=>oeeCard('oeeprog','OEE programado',t.oee.programado,t.programado,'período selecionado menos abono'),
     oeeobs:()=>oeeCard('oeeobs','OEE observado',t.oee.observado,t.observado,'só o tempo coberto por registros'),
     oeeoper:()=>oeeCard('oeeoper','OEE operacional',t.oee.operacional,t.operacional,'observado menos as paradas detectadas'),
@@ -1786,6 +1868,20 @@ function cardsHTML(A){
     +`<div class="v">${v}</div><div class="u">${u}</div>${e?`<div class="eq">${e}</div>`:''}</div>`).join('');
 }
 
+/* A legenda do gráfico diz contra o que as cores estão medindo — muda com o
+   critério escolhido e com a meta de OEE vigente no período. */
+function legendaCores(){
+  const t=LAST.AS[0]?LAST.AS[0].tot:null;
+  const porOee=PREFS.corPor==='oee';
+  const alvoTxt=porOee?(t&&t.alvoOee!=null?fmtPct(t.alvoOee):'sem meta'):'a meta de peças';
+  const atenTxt=porOee?(t&&t.atencaoOee!=null?fmtPct(t.atencaoOee):'—'):'85%';
+  return '<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
+    +'<span style="color:var(--tx3)">'+(porOee?'OEE contra':'atingimento de')+' '+esc(alvoTxt)+'</span>'
+    +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>atingiu</span>'
+    +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>a partir de '+esc(atenTxt)+'</span>'
+    +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo</span></span>';
+}
+
 function seta(atual,ant){
   if(ant==null||!Number.isFinite(ant)||ant===0)return '<span class="arw eq">'+NAO_CALC+'</span>';
   const d=(atual-ant)/ant*100;
@@ -1793,6 +1889,8 @@ function seta(atual,ant){
   return `<span class="arw ${d>0?'up':'dn'}">${d>0?'▲':'▼'} ${nf1(Math.abs(d))}%</span>`;
 }
 const pill=(r,a)=>`<span class="pill p-${cl(alvo(r,a||1))}">${fmtPct(r)}</span>`;
+/* Pílula de OEE colorida contra a meta vigente do recorte. */
+const pillOee=(r,l)=>`<span class="pill p-${clAlvo(r,l.alvoOee,l.atencaoOee)}">${fmtPct(r)}</span>`;
 
 /* --- fechamento por turno ------------------------------------------------ */
 /* Duas janelas por linha: a produção pode vir de antes do turno (caixas
@@ -1819,8 +1917,8 @@ function tabelaTurnos(A){
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${l.incAbsorvido>0?nf(l.incAbsorvido):'—'}</td>`
       +`<td class="sep">${hDur(l.dur)}</td><td>${hDur(l.comDados)}</td><td>${hDur(l.semDados)}</td><td>${fmtMin(l.parado)}</td>`
-      +`<td class="sep">${pill(l.oee.marcacoes,.85)}</td><td>${pill(l.oee.programado,.85)}</td>`
-      +`<td>${pill(l.oee.observado,.85)}</td><td>${pill(l.oee.parcial,.85)}</td>`
+      +`<td class="sep">${pillOee(l.oee.marcacoes,l)}</td><td>${pillOee(l.oee.programado,l)}</td>`
+      +`<td>${pillOee(l.oee.observado,l)}</td><td>${pillOee(l.oee.parcial,l)}</td>`
       +`<td>${pill(l.atingBase)}</td>`
       +`<td>${fmtPct(l.cobertura)}</td></tr>`;
     T.inc+=l.inc;T.pcs+=l.pcs;T.ant+=l.incAbsorvido;T.dur+=l.dur;T.com+=l.comDados;
@@ -1896,6 +1994,12 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
+    ['Meta de OEE (família)',(t.familias||[]).length>1
+        ? 'média das metas vigentes ponderada pelos minutos'
+        : 'vigência da família na data do período',
+      (t.familias||[]).map(f=>esc(f.familia||'sem família')+' '+fmtPct(f.alvoOee)
+        +(f.vigencia?' ('+esc(f.vigencia)+')':'')).join(' + ')||NAO_CALC,
+      fmtPct(t.alvoOee)],
     ['Meta por hora (catálogo)',(t.catalogos||[]).length>1
         ? 'média das metas horárias ponderada pelos minutos'
         : 'meta do catálogo da hora',
@@ -1950,10 +2054,16 @@ function diagnosticos(){
       `Produção de <b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planMetaBase)}</b> da meta proporcional — <b>${fmtPct(t.atingBase)}</b>. `
       +`A base é ${nf(c.meta)} peças/h aplicados a ${hDur(t.tempoBase)} (${esc(bs)})`
       +(t.abono>0?`, já líquidos de ${nf1(t.abono)} min de abono.`:'.')]);
-    D.push([t.oeeBase==null?'info':t.oeeBase>=.85?'ok':t.oeeBase>=.7?'aten':'crit','OEE',mq,
-      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`,
+    const nvOee=t.oeeBase==null||t.alvoOee==null?'info'
+      :clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee)==='g'?'ok'
+      :clAlvo(t.oeeBase,t.alvoOee,t.atencaoOee)==='w'?'aten':'crit';
+    D.push([nvOee,'OEE',mq,
+      `OEE de ${fmtPct(t.oeeBase)} sobre ${esc(bs.toLowerCase())}`
+        +(t.alvoOee!=null?` contra a meta de ${fmtPct(t.alvoOee)}`:''),
       `<b>${nf(t.pcs)}</b> peças contra <b>${fmtVal(t.planCapBase)}</b> planejadas pela capacidade `
       +`(${nf(c.cap)} peças/h × ${hDur(t.tempoBase)}). `
+      +(t.alvoOee!=null?`A meta de OEE vigente é <b>${fmtPct(t.alvoOee)}</b>`
+        +((t.familias||[]).length?` (${esc(t.familias[0].familia||'sem família')}${t.familias[0].vigencia?', '+esc(t.familias[0].vigencia):''})`:'')+'. ':'')
       +(t.planCapBase!=null?`A diferença de <b>${nf(t.planCapBase-t.pcs)}</b> peças é o total a recuperar.`:'')]);
     if(t.semDados>0)
       D.push([t.cobertura!=null&&t.cobertura<.85?'crit':'aten','SEM DADOS',mq,
@@ -2067,10 +2177,7 @@ function renderAnalise(){
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
     +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
     +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'')
-    +(secaoAtiva('corMeta')?'<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
-      +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>bateu a meta</span>'
-      +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>85% ou mais</span>'
-      +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo de 85%</span></span>':'');
+    +(secaoAtiva('corMeta')?legendaCores():'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 
@@ -2378,7 +2485,10 @@ function grafico(cv,forcaW,forcaH){
      máquina a identidade fica no contorno, para não perder quem é quem. */
   const porMeta=secaoAtiva('corMeta');
   const COR={g:T.ok||'#1B8A5A',w:T.warn||'#B27300',r:T.bad||'#C33C4E',n:T.tx3};
-  const corDe=(A,i)=>porMeta?COR[cl(A.linhas[i].atingBase)]:A.maq.cor;
+  const classeDe=l=>PREFS.corPor==='oee'
+    ? clAlvo(l.oeeBase,l.alvoOee,l.atencaoOee)   // meta de OEE vigente da família
+    : cl(l.atingBase);                           // atingimento da meta de peças
+  const corDe=(A,i)=>porMeta?COR[classeDe(A.linhas[i])]:A.maq.cor;
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
@@ -2557,10 +2667,15 @@ let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(dese
 
 const periodoTxt=()=>dtBR(LAST.ini,'min')+' a '+dtBR(LAST.fim,'min');
 const semTags=s=>String(s).replace(/<[^>]+>/g,'');
-const corOEE=r=>r==null?'#8593A5':r>=.85?'#1B8A5A':r>=.7?'#B27300':'#C33C4E';
+/* No A4 as cores são fixas (papel não tem tema), mas os limites vêm da meta
+   de OEE vigente do período, igual à tela. */
+const corOEE=(r,t)=>{const c=t?clAlvo(r,t.alvoOee,t.atencaoOee):cl(r==null?null:r/.85);
+  return c==='g'?'#1B8A5A':c==='w'?'#B27300':c==='r'?'#C33C4E':'#8593A5'};
 const RODAPE_FORMULAS=()=>'OEE = peças ÷ (capacidade × base ÷ 60). Meta proporcional = meta × base ÷ 60. '
   +'Base desta emissão: '+rotuloBase(LAST.base)+' — '+descBase(LAST.base)+'. '
   +'Contagem: '+rotuloContagem(LAST.contagem)+'. '
+  +(LAST.AS[0]&&LAST.AS[0].tot.alvoOee!=null
+    ?'Meta de OEE vigente: '+fmtPct(LAST.AS[0].tot.alvoOee)+'. ':'')
   +'Tempo sem dados é ausência de registro e não é contado como parada.';
 
 function relatorioA4(){
@@ -2571,7 +2686,7 @@ function relatorioA4(){
     sem:s.sem+A.tot.semDados}),{pcs:0,plan:0,meta:0,par:0,npar:0,sem:0});
   const kpis=um?[
     ['Produção',nf(t0.pcs),'peças · '+nf(t0.inc)+' '+esc(c0.unid)+'s'],
-    ['OEE',fmtPct(t0.oeeBase),'de '+fmtVal(t0.planCapBase)+' planejadas'],
+    ['OEE',fmtPct(t0.oeeBase),t0.alvoOee!=null?'meta '+fmtPct(t0.alvoOee):'de '+fmtVal(t0.planCapBase)+' planejadas'],
     ['Atingimento',fmtPct(t0.atingBase),'meta '+fmtVal(t0.planMetaBase)],
     ['Base do cálculo',hDur(t0.tempoBase),rotuloBase(t0.base)],
     ['Cobertura',fmtPct(t0.cobertura),'sem dados '+hDur(t0.semDados)]
@@ -2589,7 +2704,7 @@ function relatorioA4(){
       +A0.turnos.map(l=>`<tr><td>${l.bk.dia} ${esc(l.bk.rot)}</td>`
         +`<td style="text-align:left;font-family:Inter,sans-serif">${l.status.rot}</td>`
         +`<td>${nf(l.pcs)}${l.incAbsorvido>0?' <small>(+'+nf(l.incAbsorvido)+')</small>':''}</td><td>${hDur(l.comDados)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase,l)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${fmtPct(l.oee.parcial)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td></td><td>${nf(t0.pcs)}</td><td>${hDur(t0.comDados)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${fmtPct(t0.oee.parcial)}</td></tr></tfoot></table>`;
@@ -2599,7 +2714,7 @@ function relatorioA4(){
       +'<th>OEE %</th><th>Sem dados</th><th>Parado</th></tr></thead><tbody>'
       +vis.map(l=>`<tr><td>${(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot}</td><td>${nf(l.pcs)}</td>`
         +`<td>${fmtPct(l.atingBase)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(l.oeeBase)}">${fmtPct(l.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(l.oeeBase,l)}">${fmtPct(l.oeeBase)}</td>`
         +`<td>${l.semDados>0?nf1(l.semDados):'—'}</td><td>${l.parado>0?nf1(l.parado):'—'}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td>${nf(t0.pcs)}</td><td>${fmtPct(t0.atingBase)}</td>`
       +`<td>${fmtPct(t0.oeeBase)}</td><td>${nf1(t0.semDados)}</td><td>${nf1(t0.parado)}</td></tr></tfoot></table>`;
@@ -2607,7 +2722,7 @@ function relatorioA4(){
     esquerda='<h4>Comparativo por máquina</h4><table><thead><tr><th>Máquina</th><th>Peças</th><th>OEE %</th>'
       +'<th>Meta %</th><th>Cobertura</th><th>Parado</th></tr></thead><tbody>'
       +AS.map(A=>`<tr><td>${esc(A.maq.nome)}</td><td>${nf(A.tot.pcs)}</td>`
-        +`<td style="font-weight:700;color:${corOEE(A.tot.oeeBase)}">${fmtPct(A.tot.oeeBase)}</td>`
+        +`<td style="font-weight:700;color:${corOEE(A.tot.oeeBase,A.tot)}">${fmtPct(A.tot.oeeBase)}</td>`
         +`<td>${fmtPct(A.tot.atingBase)}</td><td>${fmtPct(A.tot.cobertura)}</td>`
         +`<td>${nf1(A.tot.parado)}</td></tr>`).join('')
       +`</tbody><tfoot><tr><td>Total</td><td>${nf(sum.pcs)}</td><td>${pct(sum.pcs,sum.plan)}</td>`
@@ -2670,7 +2785,7 @@ function blocoRastro(A){
     +L.map(([a,b,cc,d,e],i)=>`<tr><td>${a}</td>`
       +`<td style="text-align:left;font-family:Inter,sans-serif">${b}</td><td>${cc}</td><td>${d}</td>`
       +`<td>${fmtVal(t.planCap[['marcacoes','turno','programado','observado','operacional','parcial'][i]])}</td>`
-      +`<td style="font-weight:700;color:${corOEE(e)}">${fmtPct(e)}</td></tr>`).join('')
+      +`<td style="font-weight:700;color:${corOEE(e,t)}">${fmtPct(e)}</td></tr>`).join('')
     +`</tbody></table><div style="font-size:7pt;color:#8593A5;margin-top:3px">`
     +`Leitura do contador ${fmtVal(t.leituraIni)} → ${fmtVal(t.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(t.contagemInicial)}). `
     +`Peças = ${nf(t.inc)} incrementos × ${nf(A.pc)} = ${nf(t.pcs)}. `
@@ -2730,6 +2845,9 @@ function textoEmail(){
     b+=`- Leitura do contador: ${fmtVal(x.leituraIni)} → ${fmtVal(x.leituraFim)} (indica a próxima unidade, contagem inicia em ${nf(x.contagemInicial)})\n`;
     if(x.incAbsorvido>0)b+=`- Adiantadas absorvidas: ${nf(x.incAbsorvido)} incrementos feitos antes do início do turno\n`;
     if(x.incForaTurno>0)b+=`- Bônus: ${nf(x.pcsForaTurno)} peças produzidas fora de turno cadastrado, no numerador sem custar denominador\n`;
+    if(x.alvoOee!=null)
+      b+=`- Meta de OEE: ${fmtPct(x.alvoOee)} (atenção abaixo de ${fmtPct(x.atencaoOee)})`
+        +((x.familias||[]).length?` — ${x.familias.map(f=>(f.familia||'sem família')+(f.vigencia?' '+f.vigencia:'')).join('; ')}`:'')+`\n`;
     b+=`- OEE entre marcações ${fmtPct(x.oee.marcacoes)} | turno cadastrado ${fmtPct(x.oee.turno)} | programado ${fmtPct(x.oee.programado)} | observado ${fmtPct(x.oee.observado)} | operacional ${fmtPct(x.oee.operacional)} | parcial ${fmtPct(x.oee.parcial)}\n`;
     if((x.catalogos||[]).length)
       b+=`- Catálogo: ${x.catalogos.map(k=>(k.numero||'sem catálogo')+' ('+hDur(k.min)+', '+nf(k.metaHora)+' peças/h)').join('; ')}\n`;
@@ -2818,7 +2936,7 @@ const cabecalhoJanela=()=>[
 const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
   'Fora_de_turno_inc','Data_incerta_inc','Borda_inc','Nao_atribuido',
   'Leitura_inicial','Leitura_final','Contagem_inicia_em',
-  'Catalogos','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
+  'Catalogos','Familias','Meta_OEE_%','Atencao_OEE_%','Meta_efetiva_pecas_h','Meta_pecas','Atingimento_%','Planejado_pecas','OEE_base_%',
   'OEE_marcacoes_%','OEE_turno_%','OEE_programado_%','OEE_observado_%','OEE_operacional_%','OEE_parcial_%',
   'Periodo_min','Com_dados_min','Sem_dados_min','Parado_min','Abono_min',
   'Marcacoes_min','Turno_cadastrado_min','Programado_min','Observado_min','Operacional_min','Parcial_min',
@@ -2826,7 +2944,9 @@ const COLS_METRICA=['Registros','Incrementos','Pecas','Adiantadas_inc',
 const linhaMetrica=l=>[nf0(l.regs),nf0(l.inc),nf0(l.pcs),nf0(l.incAbsorvido),
   nf0(l.incForaTurno),nf0(l.incAposLacuna),nf0(l.incBorda),nf0(l.naoAtrib),
   nf0(l.leituraIni),nf0(l.leituraFim),nf0(l.contagemInicial),
-  (l.catalogos||[]).map(k=>k.numero||'sem catalogo').join(' + '),csvNum(l.metaEfetiva,0),
+  (l.catalogos||[]).map(k=>k.numero||'sem catalogo').join(' + '),
+  (l.familias||[]).map(f=>f.familia||'sem familia').join(' + '),
+  csvPct(l.alvoOee),csvPct(l.atencaoOee),csvNum(l.metaEfetiva,0),
   csvNum(l.planMetaBase,0),csvPct(l.atingBase),csvNum(l.planCapBase,0),csvPct(l.oeeBase),
   csvPct(l.oee.marcacoes),csvPct(l.oee.turno),csvPct(l.oee.programado),csvPct(l.oee.observado),
   csvPct(l.oee.operacional),csvPct(l.oee.parcial),
@@ -3094,7 +3214,7 @@ async function montarDados(){
     if(r.data<o.min)o.min=r.data;if(r.data>o.max)o.max=r.data;}
   $('db_kpis').innerHTML=[
     ['Máquinas',nf(MAQ.length),'cadastradas','c'],['Turnos',nf(TUR.length),'cadastrados','c'],
-    ['Catálogos',nf(CAT.length),'cadastrados','o'],
+    ['Catálogos',nf(CAT.length),'cadastrados','o'],['Famílias',nf(FAM.length),'com meta de OEE','o'],
     ['Dias com dados',nf(all.length),'somando todas as máquinas','o'],
     ['Registros guardados',nf(pts),'pontos do contador','o']
   ].map(([k,v,u,x])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join('');
@@ -3108,9 +3228,10 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:5,dbVersao:DB_VER,exportado:new Date().toISOString(),
+  const bk={versao:6,dbVersao:DB_VER,exportado:new Date().toISOString(),
     maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
     ajustes:await getAll('ajustes'),catalogos:await getAll('catalogos'),
+    familias:await getAll('familias'),
     programacao:await getAll('programacao'),
     dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
@@ -3127,6 +3248,7 @@ $('db_file').addEventListener('change',e=>{
       for(const t of bk.turnos||[])await put('turnos',t);
       for(const j of bk.ajustes||[])await put('ajustes',j);
       for(const k of bk.catalogos||[])await put('catalogos',k);
+      for(const f of bk.familias||[])await put('familias',normalizaFamilia(f));
       /* mescla por hora: restaurar não apaga programação de horas ausentes no backup */
       for(const g of bk.programacao||[]){
         const ex=await get1('programacao',g.chave);
@@ -3139,7 +3261,7 @@ $('db_file').addEventListener('change',e=>{
         await put('dias',d);
       }
       if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
-      await recarregar();montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();montarDados();
+      await recarregar();montarMaquinas();montarTurnos();montarDia();montarFamilias();montarCatalogos();montarAnalise();montarDados();
       toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
     }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };
@@ -3159,25 +3281,45 @@ $('db_del').addEventListener('click',async()=>{
    em peças por hora. A meta usada num período não é mais um número fixo da
    máquina: é a meta do catálogo que estava rodando em cada hora.
 
-   Cadeia de fallback, do mais específico para o mais geral:
+   Cadeia de fallback da meta de peças, do mais específico para o mais geral:
      1. catálogo programado para aquela hora;
      2. catálogo padrão da máquina;
-     3. meta cadastrada na própria máquina. */
-"use strict";
+     3. meta cadastrada na própria máquina.
 
+   A meta de OEE não vive no catálogo: vive na FAMÍLIA a que ele pertence, e
+   com vigência por período — a meta de OEE muda de tempos em tempos, e o
+   histórico não pode ser reescrito quando ela muda. Cada hora resolve a sua
+   meta de OEE pela data daquela hora. */
+"use strict";
 const catPorId=id=>CAT.find(c=>c.id===id)||null;
+const famPorId=id=>FAM.find(f=>f.id===id)||null;
+/* Vigência que cobre a data: a mais recente que já começou e ainda não terminou.
+   `ate` vazio é vigência aberta. */
+function vigenciaNaData(fam,data){
+  if(!fam||!fam.metas)return null;
+  let achada=null;
+  for(const v of fam.metas){
+    if(v.de>data)continue;
+    if(v.ate&&v.ate<data)continue;
+    if(!achada||v.de>achada.de)achada=v;
+  }
+  return achada;
+}
+const pctTxt=v=>v==null?NAO_CALC:nf1(v*100)+'%';
 const rotuloCat=c=>c?esc(c.numero)+(c.tipo?' · '+esc(c.tipo):''):'—';
 
 /* --- cadastro ------------------------------------------------------------ */
 function formCatalogo(c){
   const novo=!c;
-  c=c||{id:uid(),numero:'',tipo:'',metaHora:90000,obs:''};
+  c=c||{id:uid(),numero:'',tipo:'',familiaId:'',metaHora:90000,obs:''};
   $('dlg_t').textContent=novo?'Cadastrar catálogo':'Editar catálogo';
   $('dlg_p').textContent='A meta é sempre em peças por hora, e vale para as horas em que este catálogo estiver programado.';
   $('dlg_b').innerHTML=`<div class="grid">
     <div class="fld"><label for="f_cnum">Número do catálogo</label><input id="f_cnum" value="${esc(c.numero)}" placeholder="CAT-1024"></div>
     <div class="fld"><label for="f_ctipo">Tipo do catálogo</label><input id="f_ctipo" value="${esc(c.tipo)}" placeholder="Blister 12un"></div>
     <div class="fld"><label for="f_cmeta">Meta (peças/h)</label><input type="number" id="f_cmeta" value="${c.metaHora}" min="0" step="100"></div>
+    <div class="fld"><label for="f_cfam">Família</label><select id="f_cfam"><option value="">—</option>
+      ${FAM.map(f=>`<option value="${f.id}"${f.id===c.familiaId?' selected':''}>${esc(f.nome)}</option>`).join('')}</select></div>
   </div>
   <div class="fld" style="margin-top:14px"><label for="f_cobs">Observação</label><textarea id="f_cobs" placeholder="particularidades de setup, formato, restrições...">${esc(c.obs||'')}</textarea></div>`;
   $('dlg_f').innerHTML='';
@@ -3190,9 +3332,9 @@ function formCatalogo(c){
     const meta=+$('f_cmeta').value;
     if(!(meta>0)){toast('A meta precisa ser maior que zero');return}
     await put('catalogos',{id:c.id,numero,tipo:$('f_ctipo').value.trim(),
-      metaHora:meta,obs:$('f_cobs').value.trim()});
+      familiaId:$('f_cfam').value||'',metaHora:meta,obs:$('f_cobs').value.trim()});
     $('dlg').close();await recarregar();
-    montarCatalogos();montarMaquinas();
+    montarCatalogos();montarFamilias();montarMaquinas();
     if(LAST)await rodarAnalise();
     toast('Catálogo salvo')});
   $('dlg_f').append(x,s);$('dlg').showModal();
@@ -3210,7 +3352,8 @@ function montarCatalogos(){
     const usos=MAQ.filter(m=>m.catalogoId===c.id).map(m=>m.nome);
     d.innerHTML=`<span class="bar" style="background:var(--meta)"></span>
       <div><div class="nm">${esc(c.numero)}${c.tipo?' <span class="tag">'+esc(c.tipo)+'</span>':''}</div>
-      <div class="ds">meta ${nf(c.metaHora)} peças/h${usos.length?' · padrão em '+esc(usos.join(', ')):''}</div>
+      <div class="ds">meta ${nf(c.metaHora)} peças/h
+        · família ${c.familiaId&&famPorId(c.familiaId)?esc(famPorId(c.familiaId).nome):'nenhuma'}${usos.length?' · padrão em '+esc(usos.join(', ')):''}</div>
       ${c.obs?'<div class="ds" style="margin-top:3px;font-style:italic">'+esc(c.obs)+'</div>':''}</div><span class="sp"></span>`;
     const e=el('button','act');e.type='button';e.textContent='Editar';
     e.addEventListener('click',()=>formCatalogo(c));
@@ -3225,6 +3368,104 @@ function montarCatalogos(){
   }
 }
 $('k_novo').addEventListener('click',()=>formCatalogo(null));
+
+/* --- famílias e metas de OEE por vigência -------------------------------- */
+function formFamilia(f){
+  const novo=!f;
+  f=f||{id:uid(),nome:'',obs:'',metas:[]};
+  const metas=f.metas.map(v=>({...v}));
+  $('dlg_t').textContent=novo?'Cadastrar família':'Editar família';
+  $('dlg_p').textContent='A meta de OEE vale por período. Ao mudar a data da análise, a ferramenta usa a meta que estava vigente naquela data.';
+  const linhas=()=>metas.map((v,i)=>`<tr>
+    <td><input type="date" data-i="${i}" data-c="de" value="${esc(v.de)}"></td>
+    <td><input type="date" data-i="${i}" data-c="ate" value="${esc(v.ate||'')}" placeholder="em aberto"></td>
+    <td><input type="number" data-i="${i}" data-c="alvo" value="${v.alvo?nf1(v.alvo*100).replace(',','.'):''}" min="1" max="100" step="0.5"></td>
+    <td><input type="number" data-i="${i}" data-c="atencao" value="${v.atencao?nf1(v.atencao*100).replace(',','.'):''}" min="0" max="100" step="0.5"></td>
+    <td><button type="button" class="act dgr" data-rm="${i}">Remover</button></td></tr>`).join('');
+  const desenha=()=>{
+    $('f_vig').innerHTML='<thead><tr><th>De</th><th>Até</th><th>Meta de OEE (%)</th><th>Atenção (%)</th><th></th></tr></thead>'
+      +'<tbody>'+(metas.length?linhas()
+        :'<tr><td colspan="5" style="text-align:center;color:var(--tx3)">Nenhuma vigência. Sem meta de OEE, os indicadores desta família ficam neutros.</td></tr>')+'</tbody>';
+    $('f_vig').querySelectorAll('input').forEach(i=>i.addEventListener('input',()=>{
+      const v=metas[+i.dataset.i],c=i.dataset.c;
+      if(c==='de'||c==='ate')v[c]=i.value;
+      else v[c]=(+i.value||0)/100;
+    }));
+    $('f_vig').querySelectorAll('button[data-rm]').forEach(b=>b.addEventListener('click',()=>{
+      metas.splice(+b.dataset.rm,1);desenha();
+    }));
+  };
+  $('dlg_b').innerHTML=`<div class="grid">
+    <div class="fld"><label for="f_fnome">Nome da família</label><input id="f_fnome" value="${esc(f.nome)}" placeholder="Blister pequeno"></div>
+    <div class="fld"><label for="f_fobs">Observação</label><input id="f_fobs" value="${esc(f.obs||'')}" placeholder="linha de produtos, restrições..."></div>
+  </div>
+  <div class="sublbl" style="margin-top:16px">Metas de OEE por vigência</div>
+  <div class="tblwrap"><table id="f_vig" class="vig"></table></div>
+  <div class="acts"><button type="button" class="act" id="f_vig_add">Adicionar vigência</button></div>
+  <p class="note">A vigência mais recente que já começou e ainda não terminou é a que vale.
+    Deixe <b>Até</b> em branco para vigência aberta. <b>Atenção</b> é o limite abaixo do qual o indicador fica vermelho;
+    em branco, usa 90% da meta.</p>`;
+  desenha();
+  $('f_vig_add').addEventListener('click',()=>{
+    const hoje=iso(new Date());
+    const ult=metas[metas.length-1];
+    metas.push({de:hoje,ate:'',alvo:ult?ult.alvo:.85,atencao:ult?ult.atencao:0});
+    desenha();
+  });
+  $('dlg_f').innerHTML='';
+  const x=el('button','act');x.type='button';x.textContent='Cancelar';
+  x.addEventListener('click',()=>$('dlg').close());
+  const sv=el('button','act pri');sv.type='button';sv.textContent='Salvar';
+  sv.addEventListener('click',async()=>{
+    const nome=$('f_fnome').value.trim();
+    if(!nome){toast('Dê um nome à família');return}
+    for(const v of metas){
+      if(!v.de){toast('Toda vigência precisa de uma data inicial');return}
+      if(v.ate&&v.ate<v.de){toast('A data final não pode ser antes da inicial');return}
+      if(!(v.alvo>0)){toast('Informe a meta de OEE da vigência');return}
+      if(!(v.atencao>0))v.atencao=v.alvo*.9;
+    }
+    await put('familias',{id:f.id,nome,obs:$('f_fobs').value.trim(),metas});
+    $('dlg').close();await recarregar();
+    montarFamilias();montarCatalogos();
+    if(LAST)await rodarAnalise();
+    toast('Família salva')});
+  $('dlg_f').append(x,sv);$('dlg').showModal();
+}
+
+function montarFamilias(){
+  const w=$('k_fam');
+  if(!FAM.length){
+    w.innerHTML='<div class="empty">Nenhuma família cadastrada. Sem família, os indicadores de OEE ficam sem meta e as cores ficam neutras.</div>';
+    return;
+  }
+  w.innerHTML='';
+  const hoje=iso(new Date());
+  for(const f of FAM){
+    const v=vigenciaNaData(f,hoje);
+    const itens=CAT.filter(c=>c.familiaId===f.id);
+    const d=el('div','item');
+    d.innerHTML=`<span class="bar" style="background:var(--accent)"></span>
+      <div><div class="nm">${esc(f.nome)}${f.obs?' <span class="tag">'+esc(f.obs)+'</span>':''}</div>
+      <div class="ds">${f.metas.length?f.metas.length+' vigência(s)':'sem meta de OEE'}
+        · hoje: ${v?'meta '+pctTxt(v.alvo)+' · atenção '+pctTxt(v.atencao):'sem vigência ativa'}
+        · ${itens.length} catálogo(s)</div>
+      ${f.metas.length?'<div class="ds" style="margin-top:3px">'+f.metas.map(m=>
+        brDate(m.de)+' → '+(m.ate?brDate(m.ate):'em aberto')+': '+pctTxt(m.alvo)).join(' · ')+'</div>':''}
+      </div><span class="sp"></span>`;
+    const e=el('button','act');e.type='button';e.textContent='Editar';
+    e.addEventListener('click',()=>formFamilia(f));
+    const x=el('button','act dgr');x.type='button';x.textContent='Excluir';
+    x.addEventListener('click',async()=>{
+      if(!confirm('Excluir a família '+f.nome+'?\n\nOs catálogos dela ficam sem meta de OEE. Nenhum registro de produção é apagado.'))return;
+      await del('familias',f.id);await recarregar();
+      montarFamilias();montarCatalogos();
+      if(LAST)await rodarAnalise();
+      toast('Família excluída')});
+    d.append(e,x);w.appendChild(d);
+  }
+}
+$('k_fam_novo').addEventListener('click',()=>formFamilia(null));
 
 /* --- seletor do painel de análise ---------------------------------------- */
 function montarSeletorCatalogo(){
@@ -3291,23 +3532,44 @@ async function definirCatalogoDaHora(maquinaId,ms,catalogoId){
   toast(catalogoId?'Catálogo aplicado às '+pad2(d.getHours())+'h':'Catálogo removido das '+pad2(d.getHours())+'h');
 }
 
-/* Monta o mapa hora -> meta que o motor de cálculo consome. */
-async function metaHorasDaMaquina(maq,deK,ateK){
+/* Monta o mapa hora -> meta que o motor de cálculo consome.
+
+   O mapa cobre TODA hora da janela, não só as programadas: a meta de OEE
+   depende da data, então cada hora precisa resolver a própria vigência. */
+function infoDoCatalogo(cat,data,padraoOee){
+  const fam=cat&&cat.familiaId?famPorId(cat.familiaId):null;
+  const vig=vigenciaNaData(fam,data);
+  return{
+    metaHora:cat?cat.metaHora:(padraoOee&&padraoOee.metaHora),
+    catalogoId:cat?cat.id:null,numero:cat?cat.numero:null,tipo:cat?cat.tipo:null,
+    familiaId:fam?fam.id:null,familia:fam?fam.nome:null,
+    alvoOee:vig?vig.alvo:null,atencaoOee:vig?vig.atencao:null,
+    vigencia:vig?brDate(vig.de)+' → '+(vig.ate?brDate(vig.ate):'em aberto'):null};
+}
+async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
   const padraoCat=catPorId(maq.catalogoId);
-  const metaPadrao=padraoCat
-    ?{metaHora:padraoCat.metaHora,catalogoId:padraoCat.id,numero:padraoCat.numero,tipo:padraoCat.tipo}
-    :{metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,catalogoId:null,
-      numero:null,tipo:'meta da máquina'};
-  const metaHoras=new Map();
+  const semCat={metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
+    catalogoId:null,numero:null,tipo:'meta da máquina',
+    familiaId:null,familia:null,alvoOee:null,atencaoOee:null,vigencia:null};
+
+  const porHora=new Map();
   let progs=[];
   try{progs=await programacaoDoIntervalo(maq.id,deK,ateK)}
   catch(e){console.error('[monitor] programação não pôde ser lida',e)}
-  for(const p of progs)for(const [h,cid] of Object.entries(p.horas||{})){
-    const c=catPorId(cid);if(!c)continue;
-    metaHoras.set(p.data+'T'+pad2(h),
-      {metaHora:c.metaHora,catalogoId:c.id,numero:c.numero,tipo:c.tipo});
+  for(const p of progs)for(const [h,cid] of Object.entries(p.horas||{}))
+    porHora.set(p.data+'T'+pad2(h),cid);
+
+  /* Resolve hora a hora: o catálogo pode ser o programado ou o padrão, e a
+     vigência da meta de OEE depende da data daquela hora. */
+  const metaHoras=new Map();
+  const d=new Date(ini);d.setMinutes(0,0,0);
+  for(let t=d.getTime();t<fim;t+=3600000){
+    const dia=new Date(t),data=iso(dia);
+    const chave=data+'T'+pad2(dia.getHours());
+    const cat=catPorId(porHora.get(chave))||padraoCat;
+    metaHoras.set(chave,cat?infoDoCatalogo(cat,data,semCat):{...semCat});
   }
-  return{metaHoras,metaPadrao};
+  return{metaHoras,metaPadrao:semCat};
 }
 
 /* === 90-montagem.js === */
@@ -3380,6 +3642,7 @@ function aplicarPrefsNaTela(){
   $('a_lim').value=PREFS.limParada;$('a_limsd').value=PREFS.limSemDados;
   $('a_autoseg').value=PREFS.autoSeg;
   $('a_contagem').value=PREFS.contagem;
+  $('a_corpor').value=PREFS.corPor;
   ajudaCalculo();
 }
 
@@ -3392,7 +3655,7 @@ const ajudaCalculo=()=>{$('a_basehelp').innerHTML=
   +'<br><b>Contagem:</b> '+esc(descContagem($('a_contagem').value))};
 $('a_base').addEventListener('change',ajudaCalculo);
 $('a_contagem').addEventListener('change',ajudaCalculo);
-['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem']
+['a_gran','a_tipo','a_lim','a_limsd','a_de','a_ate','a_hde','a_hate','a_borda','a_base','a_contagem','a_corpor']
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
@@ -3421,7 +3684,7 @@ $('a_autoseg').addEventListener('change',()=>{if($('a_auto').checked)ligarAuto()
   const hoje=new Date();
   $('a_de').value=iso(new Date(hoje.getTime()-6*86400000));
   $('a_ate').value=iso(hoje);$('d_data').value=iso(hoje);
-  montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();
+  montarMaquinas();montarTurnos();montarDia();montarFamilias();montarCatalogos();montarAnalise();
   await montarDados();
   PRONTO=true;
   if(!MAQ.length){
