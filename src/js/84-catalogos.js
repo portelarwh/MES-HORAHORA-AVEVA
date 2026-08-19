@@ -34,7 +34,7 @@ const rotuloCat=c=>c?esc(c.numero)+(c.tipo?' · '+esc(c.tipo):''):'—';
 /* --- cadastro ------------------------------------------------------------ */
 function formCatalogo(c){
   const novo=!c;
-  c=c||{id:uid(),numero:'',tipo:'',familiaId:'',metaHora:90000,obs:''};
+  c=c||{id:uid(),numero:'',tipo:'',familiaId:'',metaHora:90000,cor:PAL[CAT.length%PAL.length],obs:''};
   $('dlg_t').textContent=novo?'Cadastrar catálogo':'Editar catálogo';
   $('dlg_p').textContent='A meta é sempre em peças por hora, e vale para as horas em que este catálogo estiver programado.';
   $('dlg_b').innerHTML=`<div class="grid">
@@ -43,8 +43,12 @@ function formCatalogo(c){
     <div class="fld"><label for="f_cmeta">Meta (peças/h)</label><input type="number" id="f_cmeta" value="${c.metaHora}" min="0" step="100"></div>
     <div class="fld"><label for="f_cfam">Família</label><select id="f_cfam"><option value="">—</option>
       ${FAM.map(f=>`<option value="${f.id}"${f.id===c.familiaId?' selected':''}>${esc(f.nome)}</option>`).join('')}</select></div>
+    <div class="fld"><label for="f_ccor">Cor do catálogo</label>
+      <div class="corfld"><input type="color" id="f_ccor" value="${esc(c.cor||PAL[0])}">
+      <span class="corhex" id="f_ccor_hex">${esc(c.cor||PAL[0])}</span></div></div>
   </div>
   <div class="fld" style="margin-top:14px"><label for="f_cobs">Observação</label><textarea id="f_cobs" placeholder="particularidades de setup, formato, restrições...">${esc(c.obs||'')}</textarea></div>`;
+  $('f_ccor').addEventListener('input',()=>{$('f_ccor_hex').textContent=$('f_ccor').value});
   $('dlg_f').innerHTML='';
   const x=el('button','act');x.type='button';x.textContent='Cancelar';
   x.addEventListener('click',()=>$('dlg').close());
@@ -55,7 +59,8 @@ function formCatalogo(c){
     const meta=+$('f_cmeta').value;
     if(!(meta>0)){toast('A meta precisa ser maior que zero');return}
     await put('catalogos',{id:c.id,numero,tipo:$('f_ctipo').value.trim(),
-      familiaId:$('f_cfam').value||'',metaHora:meta,obs:$('f_cobs').value.trim()});
+      familiaId:$('f_cfam').value||'',metaHora:meta,cor:$('f_ccor').value,
+      obs:$('f_cobs').value.trim()});
     $('dlg').close();await recarregar();
     montarCatalogos();montarFamilias();montarMaquinas();
     if(LAST)await rodarAnalise();
@@ -73,7 +78,7 @@ function montarCatalogos(){
   for(const c of CAT){
     const d=el('div','item');
     const usos=MAQ.filter(m=>m.catalogoId===c.id).map(m=>m.nome);
-    d.innerHTML=`<span class="bar" style="background:var(--meta)"></span>
+    d.innerHTML=`<span class="bar" style="background:${esc(c.cor||'var(--meta)')}"></span>
       <div><div class="nm">${esc(c.numero)}${c.tipo?' <span class="tag">'+esc(c.tipo)+'</span>':''}</div>
       <div class="ds">meta ${nf(c.metaHora)} peças/h
         · família ${c.familiaId&&famPorId(c.familiaId)?esc(famPorId(c.familiaId).nome):'nenhuma'}${usos.length?' · padrão em '+esc(usos.join(', ')):''}</div>
@@ -200,6 +205,7 @@ function montarSeletorCatalogo(){
 }
 const optsCatalogo=sel=>'<option value="">—</option>'
   +CAT.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.numero)}</option>`).join('');
+const corCat=id=>{const c=catPorId(id);return c&&c.cor?c.cor:'transparent'};
 
 /* --- programação por hora ------------------------------------------------
    Uma linha por máquina e dia, com um mapa de hora do dia para catálogo.
@@ -265,6 +271,7 @@ function infoDoCatalogo(cat,data,padraoOee){
   return{
     metaHora:cat?cat.metaHora:(padraoOee&&padraoOee.metaHora),
     catalogoId:cat?cat.id:null,numero:cat?cat.numero:null,tipo:cat?cat.tipo:null,
+    cor:cat?cat.cor:null,
     familiaId:fam?fam.id:null,familia:fam?fam.nome:null,
     alvoOee:vig?vig.alvo:null,atencaoOee:vig?vig.atencao:null,
     vigencia:vig?brDate(vig.de)+' → '+(vig.ate?brDate(vig.ate):'em aberto'):null};
@@ -272,7 +279,7 @@ function infoDoCatalogo(cat,data,padraoOee){
 async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
   const padraoCat=catPorId(maq.catalogoId);
   const semCat={metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
-    catalogoId:null,numero:null,tipo:'meta da máquina',
+    catalogoId:null,numero:null,tipo:'meta da máquina',cor:null,
     familiaId:null,familia:null,alvoOee:null,atencaoOee:null,vigencia:null};
 
   const porHora=new Map();

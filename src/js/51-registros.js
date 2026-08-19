@@ -85,7 +85,9 @@ function tabelaHoras(A,linhas){
     const cat=l.catalogos&&l.catalogos.length?l.catalogos[0]:null;
     h+=`<tr class="exp" data-a="${l.a}" data-b="${l.b}" tabindex="0" role="button" aria-expanded="false">`
       +`<td><span class="cx">▸</span> ${rot}</td>`
-      +`<td class="cat" style="text-align:left"><select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
+      +`<td class="cat" style="text-align:left">`
+      +`<span class="swatch" style="background:${esc(cat&&cat.cor?cat.cor:'transparent')};margin-right:6px"></span>`
+      +`<select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
       +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
       +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`

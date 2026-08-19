@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise de produção hora a hora a partir do contador do AVEVA Historian: OEE, fechamento por turno e relatórios.">
-  <!-- MES Hora a Hora — AVEVA · v5.1.0 · build 2026-08-19 -->
+  <!-- MES Hora a Hora — AVEVA · v5.2.0 · build 2026-08-19 -->
   <title>MES Hora a Hora — AVEVA</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%232A6FB0'/%3E%3Cpath d='M5 5v14h14' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M8 14l3-4 2.5 2.5L18 7' stroke='white' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -290,6 +290,17 @@ section[data-aberto="false"]{margin-bottom:12px;padding-bottom:10px;border-botto
 section[data-aberto="false"] h2{margin-bottom:0}
 @media print{section[data-aberto="false"]>:not(h2){display:revert}h2.sech .cx{display:none}}
 
+/* Campo de cor do catálogo: o input nativo mais o hexadecimal ao lado. */
+.corfld{display:flex;align-items:center;gap:9px}
+.corfld input[type=color]{width:52px;height:38px;padding:2px;border:1px solid var(--line2);
+  border-radius:8px;background:var(--card2);cursor:pointer}
+.corfld .corhex{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--tx2)}
+td.cat select{max-width:150px}
+table.vig td{padding:5px 6px}
+table.vig input{width:100%;background:var(--card2);border:1px solid var(--line2);color:var(--tx);
+  font:inherit;font-size:13px;padding:6px 8px;border-radius:7px}
+table.vig{min-width:560px}
+
   </style>
 </head>
 <body>
@@ -359,6 +370,7 @@ section[data-aberto="false"] h2{margin-bottom:0}
           <select id="a_corpor">
             <option value="oee">OEE contra a meta da família</option>
             <option value="meta">Atingimento da meta de peças</option>
+            <option value="catalogo">Cor do catálogo</option>
           </select></div>
       </div>
       <p class="note" id="a_basehelp" style="margin-top:0"></p>
@@ -762,7 +774,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
   if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
-  if(out.corPor!=='oee'&&out.corPor!=='meta')out.corPor=base.corPor;
+  if(!['oee','meta','catalogo'].includes(out.corPor))out.corPor=base.corPor;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;
@@ -1077,6 +1089,7 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
     out.push({a:t,b:t+3600000,
       metaHora:info?num(info.metaHora):null,
       catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
+      cor:info?info.cor:null,
       familiaId:info?info.familiaId:null,familia:info?info.familia:null,
       alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
       vigencia:info?info.vigencia:null});
@@ -1108,7 +1121,7 @@ function metaDoRecorte(horas,a,b){
     peso+=m*h.metaHora;
     const k=h.catalogoId||'_';
     const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,
-      familia:h.familia,metaHora:h.metaHora,min:0};
+      cor:h.cor,familia:h.familia,metaHora:h.metaHora,min:0};
     u.min+=m;usados.set(k,u);
   }
   const comMeta=min-semMeta;
@@ -1768,11 +1781,14 @@ function cardsDe(A){
         L.length?L.map(k=>esc(k.numero||'sem catálogo')+' '+hDur(k.min)+' · '+nf(k.metaHora)+' peças/h').join(' | ')
           :'nenhuma hora do período tem meta cadastrada'];
     },
-    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
+    /* No cartão o carimbo vai até o segundo: os milissegundos que o historian
+       grava só interessam na lista de registros, onde se confere marcação a
+       marcação. */
+    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'s'),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
         :'começou '+hDur((t.primeiroReg-t.a)/60000)+' depois do início do período'],
-    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg),
+    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'s'),
       'último registro dentro do período','o',
       t.ultimoReg==null?'nenhum registro na janela'
         :'faltam '+hDur((t.b-t.ultimoReg)/60000)+' para o fim do período'],
@@ -1872,6 +1888,14 @@ function cardsHTML(A){
    critério escolhido e com a meta de OEE vigente no período. */
 function legendaCores(){
   const t=LAST.AS[0]?LAST.AS[0].tot:null;
+  if(PREFS.corPor==='catalogo'){
+    const K=(t&&t.catalogos)||[];
+    return '<span style="margin-left:auto;display:flex;gap:11px;align-items:center;flex-wrap:wrap">'
+      +'<span style="color:var(--tx3)">catálogo da hora</span>'
+      +(K.length?K.map(k=>`<span><span class="swatch" style="background:${k.cor||'var(--tx3)'};margin-right:5px"></span>${esc(k.numero||'sem catálogo')}</span>`).join('')
+        :'<span style="color:var(--tx3)">nenhum catálogo no período</span>')
+      +'</span>';
+  }
   const porOee=PREFS.corPor==='oee';
   const alvoTxt=porOee?(t&&t.alvoOee!=null?fmtPct(t.alvoOee):'sem meta'):'a meta de peças';
   const atenTxt=porOee?(t&&t.atencaoOee!=null?fmtPct(t.atencaoOee):'—'):'85%';
@@ -2324,7 +2348,9 @@ function tabelaHoras(A,linhas){
     const cat=l.catalogos&&l.catalogos.length?l.catalogos[0]:null;
     h+=`<tr class="exp" data-a="${l.a}" data-b="${l.b}" tabindex="0" role="button" aria-expanded="false">`
       +`<td><span class="cx">▸</span> ${rot}</td>`
-      +`<td class="cat" style="text-align:left"><select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
+      +`<td class="cat" style="text-align:left">`
+      +`<span class="swatch" style="background:${esc(cat&&cat.cor?cat.cor:'transparent')};margin-right:6px"></span>`
+      +`<select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
       +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
       +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
@@ -2488,7 +2514,15 @@ function grafico(cv,forcaW,forcaH){
   const classeDe=l=>PREFS.corPor==='oee'
     ? clAlvo(l.oeeBase,l.alvoOee,l.atencaoOee)   // meta de OEE vigente da família
     : cl(l.atingBase);                           // atingimento da meta de peças
-  const corDe=(A,i)=>porMeta?COR[classeDe(A.linhas[i])]:A.maq.cor;
+  const corDe=(A,i)=>{
+    const l=A.linhas[i];
+    if(!porMeta)return A.maq.cor;
+    if(PREFS.corPor==='catalogo'){                // a cor cadastrada na tampa
+      const k=(l.catalogos||[])[0];
+      return k&&k.cor?k.cor:T.tx3;
+    }
+    return COR[classeDe(l)];
+  };
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
@@ -2516,6 +2550,15 @@ function grafico(cv,forcaW,forcaH){
       x.fillStyle=corDe(A,idx[j]);x.beginPath();
       if(x.roundRect)x.roundRect(cx,y,bwid,hh,[4,4,0,0]);else x.rect(cx,y,bwid,hh);x.fill();
       if(porMeta&&AS.length>1){x.strokeStyle=A.maq.cor;x.lineWidth=1.6;x.stroke()}
+      /* OEE dentro da coluna; a produção continua em cima dela. */
+      if(rot&&AS.length<=2&&bwid>(forcaW?24:30)&&hh>(forcaW?18:24)){
+        const oeeTxt=fmtPct(A.linhas[idx[j]].oeeBase,0);
+        if(oeeTxt!==NAO_CALC){
+          x.fillStyle='#fff';x.textAlign='center';
+          x.font='700 '+(forcaW?8:11)+'px "IBM Plex Mono",monospace';
+          x.fillText(oeeTxt,cx+bwid/2,y+(forcaW?9:12));
+        }
+      }
       if(rot&&AS.length<=2&&bw>(forcaW?26:30)){x.fillStyle=T.tx;x.textAlign='center';
         x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
         x.fillText(v>=1000?nf(v/1000)+'k':nf(v),cx+bwid/2,y-8)}
@@ -2558,11 +2601,19 @@ function grafico(cv,forcaW,forcaH){
     });
     if(desenhou)x.stroke();
     x.setLineDash([]);
-    /* rótulo à direita para nunca colidir com o da capacidade, que fica à esquerda */
+    /* Rótulo à direita, para não colidir com o da capacidade, que fica à
+       esquerda; com um fundo atrás, porque uma coluna alta pode passar ali. */
     const ref=metas.find(v=>v!=null&&isFinite(v));
     if(ref!=null){
-      x.fillStyle=T.meta;x.textAlign='right';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
-      x.fillText('meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref)),w-pad.r-5,Y(ref)-8);
+      const txt='meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref));
+      const fs=forcaW?8:10.5;
+      x.font='600 '+fs+'px "IBM Plex Mono",monospace';
+      const tw=x.measureText(txt).width,bx=w-pad.r-5-tw-4,by=Y(ref)-8-fs;
+      x.fillStyle=T.card;x.globalAlpha=.88;
+      if(x.roundRect){x.beginPath();x.roundRect(bx,by,tw+8,fs+6,3);x.fill()}
+      else x.fillRect(bx,by,tw+8,fs+6);
+      x.globalAlpha=1;
+      x.fillStyle=T.meta;x.textAlign='right';x.fillText(txt,w-pad.r-5,Y(ref)-8);
     }
   }
 }
@@ -3311,7 +3362,7 @@ const rotuloCat=c=>c?esc(c.numero)+(c.tipo?' · '+esc(c.tipo):''):'—';
 /* --- cadastro ------------------------------------------------------------ */
 function formCatalogo(c){
   const novo=!c;
-  c=c||{id:uid(),numero:'',tipo:'',familiaId:'',metaHora:90000,obs:''};
+  c=c||{id:uid(),numero:'',tipo:'',familiaId:'',metaHora:90000,cor:PAL[CAT.length%PAL.length],obs:''};
   $('dlg_t').textContent=novo?'Cadastrar catálogo':'Editar catálogo';
   $('dlg_p').textContent='A meta é sempre em peças por hora, e vale para as horas em que este catálogo estiver programado.';
   $('dlg_b').innerHTML=`<div class="grid">
@@ -3320,8 +3371,12 @@ function formCatalogo(c){
     <div class="fld"><label for="f_cmeta">Meta (peças/h)</label><input type="number" id="f_cmeta" value="${c.metaHora}" min="0" step="100"></div>
     <div class="fld"><label for="f_cfam">Família</label><select id="f_cfam"><option value="">—</option>
       ${FAM.map(f=>`<option value="${f.id}"${f.id===c.familiaId?' selected':''}>${esc(f.nome)}</option>`).join('')}</select></div>
+    <div class="fld"><label for="f_ccor">Cor do catálogo</label>
+      <div class="corfld"><input type="color" id="f_ccor" value="${esc(c.cor||PAL[0])}">
+      <span class="corhex" id="f_ccor_hex">${esc(c.cor||PAL[0])}</span></div></div>
   </div>
   <div class="fld" style="margin-top:14px"><label for="f_cobs">Observação</label><textarea id="f_cobs" placeholder="particularidades de setup, formato, restrições...">${esc(c.obs||'')}</textarea></div>`;
+  $('f_ccor').addEventListener('input',()=>{$('f_ccor_hex').textContent=$('f_ccor').value});
   $('dlg_f').innerHTML='';
   const x=el('button','act');x.type='button';x.textContent='Cancelar';
   x.addEventListener('click',()=>$('dlg').close());
@@ -3332,7 +3387,8 @@ function formCatalogo(c){
     const meta=+$('f_cmeta').value;
     if(!(meta>0)){toast('A meta precisa ser maior que zero');return}
     await put('catalogos',{id:c.id,numero,tipo:$('f_ctipo').value.trim(),
-      familiaId:$('f_cfam').value||'',metaHora:meta,obs:$('f_cobs').value.trim()});
+      familiaId:$('f_cfam').value||'',metaHora:meta,cor:$('f_ccor').value,
+      obs:$('f_cobs').value.trim()});
     $('dlg').close();await recarregar();
     montarCatalogos();montarFamilias();montarMaquinas();
     if(LAST)await rodarAnalise();
@@ -3350,7 +3406,7 @@ function montarCatalogos(){
   for(const c of CAT){
     const d=el('div','item');
     const usos=MAQ.filter(m=>m.catalogoId===c.id).map(m=>m.nome);
-    d.innerHTML=`<span class="bar" style="background:var(--meta)"></span>
+    d.innerHTML=`<span class="bar" style="background:${esc(c.cor||'var(--meta)')}"></span>
       <div><div class="nm">${esc(c.numero)}${c.tipo?' <span class="tag">'+esc(c.tipo)+'</span>':''}</div>
       <div class="ds">meta ${nf(c.metaHora)} peças/h
         · família ${c.familiaId&&famPorId(c.familiaId)?esc(famPorId(c.familiaId).nome):'nenhuma'}${usos.length?' · padrão em '+esc(usos.join(', ')):''}</div>
@@ -3477,6 +3533,7 @@ function montarSeletorCatalogo(){
 }
 const optsCatalogo=sel=>'<option value="">—</option>'
   +CAT.map(c=>`<option value="${c.id}"${c.id===sel?' selected':''}>${esc(c.numero)}</option>`).join('');
+const corCat=id=>{const c=catPorId(id);return c&&c.cor?c.cor:'transparent'};
 
 /* --- programação por hora ------------------------------------------------
    Uma linha por máquina e dia, com um mapa de hora do dia para catálogo.
@@ -3542,6 +3599,7 @@ function infoDoCatalogo(cat,data,padraoOee){
   return{
     metaHora:cat?cat.metaHora:(padraoOee&&padraoOee.metaHora),
     catalogoId:cat?cat.id:null,numero:cat?cat.numero:null,tipo:cat?cat.tipo:null,
+    cor:cat?cat.cor:null,
     familiaId:fam?fam.id:null,familia:fam?fam.nome:null,
     alvoOee:vig?vig.alvo:null,atencaoOee:vig?vig.atencao:null,
     vigencia:vig?brDate(vig.de)+' → '+(vig.ate?brDate(vig.ate):'em aberto'):null};
@@ -3549,7 +3607,7 @@ function infoDoCatalogo(cat,data,padraoOee){
 async function metaHorasDaMaquina(maq,deK,ateK,ini,fim){
   const padraoCat=catPorId(maq.catalogoId);
   const semCat={metaHora:Number.isFinite(maq.meta)&&maq.meta>0?maq.meta:null,
-    catalogoId:null,numero:null,tipo:'meta da máquina',
+    catalogoId:null,numero:null,tipo:'meta da máquina',cor:null,
     familiaId:null,familia:null,alvoOee:null,atencaoOee:null,vigencia:null};
 
   const porHora=new Map();

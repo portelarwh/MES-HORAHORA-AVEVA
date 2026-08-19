@@ -47,3 +47,14 @@ section[data-aberto="false"]>:not(h2){display:none}
 section[data-aberto="false"]{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--line)}
 section[data-aberto="false"] h2{margin-bottom:0}
 @media print{section[data-aberto="false"]>:not(h2){display:revert}h2.sech .cx{display:none}}
+
+/* Campo de cor do catálogo: o input nativo mais o hexadecimal ao lado. */
+.corfld{display:flex;align-items:center;gap:9px}
+.corfld input[type=color]{width:52px;height:38px;padding:2px;border:1px solid var(--line2);
+  border-radius:8px;background:var(--card2);cursor:pointer}
+.corfld .corhex{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--tx2)}
+td.cat select{max-width:150px}
+table.vig td{padding:5px 6px}
+table.vig input{width:100%;background:var(--card2);border:1px solid var(--line2);color:var(--tx);
+  font:inherit;font-size:13px;padding:6px 8px;border-radius:7px}
+table.vig{min-width:560px}
