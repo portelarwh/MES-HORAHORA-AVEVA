@@ -28,7 +28,10 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Importação histórica | Vários arquivos de uma vez, gravados por máquina e por dia em IndexedDB. Reimportar período já carregado não duplica: a mesclagem é por carimbo de tempo. |
 | Janela exata | Filtro por **data e horário** inicial e final. Todo cálculo respeita o intervalo escolhido, inclusive quando ele começa ou termina no meio da hora. |
 | Filtros rápidos | Turno atual, hoje, ontem, últimas 24 h, últimos 7 dias, este mês. |
-| Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade e meta em peças por hora. |
+| Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade, meta e o catálogo padrão. |
+| Catálogos | Cada produto tem número, tipo e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
+| Acumulado | A tabela por hora mostra peças acumuladas, planejado acumulado, saldo e atingimento acumulado, além do desempenho da hora isolada. |
+| Gráfico por atingimento | Cada hora é colorida por ter batido ou não a meta daquela hora: verde bateu, âmbar 85% ou mais, vermelho abaixo. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
 | Meta proporcional | A meta acompanha a base escolhida. Por padrão a base vai da primeira à última marcação do contador — a linha começa a produzir quando a primeira caixa é contada, não quando o relógio do filtro vira. |
 | OEE em seis leituras | Entre marcações (padrão), turno cadastrado, programado, observado, operacional e parcial — com a base sempre declarada junto do número. |
@@ -112,6 +115,21 @@ entram em [`docs/FORMATO-CSV.md`](docs/FORMATO-CSV.md).
 
 O resumo está abaixo; as fórmulas completas, com exemplos que podem ser refeitos
 na mão, estão em **[`docs/calculos.md`](docs/calculos.md)**.
+
+### Catálogos e meta por hora
+
+Um catálogo é o produto que a linha está rodando, com número, tipo e meta em
+peças por hora. A meta usada em cada hora segue esta ordem:
+
+1. catálogo programado para aquela hora;
+2. catálogo padrão da máquina;
+3. meta cadastrada na própria máquina.
+
+Sem nenhum catálogo cadastrado, a apuração é idêntica à das versões anteriores.
+
+Quando o recorte atravessa catálogos diferentes, a meta é a média das metas
+horárias ponderada pelos minutos. Sete horas a 60.000 peças/h e uma a 90.000
+dão uma meta efetiva de 63.750 peças/h.
 
 ### Turnos
 

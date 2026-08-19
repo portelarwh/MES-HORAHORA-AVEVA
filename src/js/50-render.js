@@ -22,6 +22,17 @@ function cardsDe(A){
       +(t.incAbsorvido>0?' · inclui '+nf(t.incAbsorvido)+' '+esc(u)+'s adiantados antes do início do turno':'')
       +(t.incAposLacuna>0?' · '+nf(t.incAposLacuna)+' com data incerta, vindos depois de lacuna':'')
       +(t.naoAtrib>0?' · '+nf(t.naoAtrib)+' incrementos não atribuídos':'')],
+    /* Quando o período atravessa mais de um catálogo, a meta é a média das
+       metas horárias ponderada pelos minutos — o card mostra a composição. */
+    catalogo:()=>{
+      const L=t.catalogos||[];
+      const princ=L[0];
+      return['catalogo','Catálogo do período',
+        L.length===0?NAO_CALC:L.length===1?esc(princ.numero||'sem catálogo'):L.length+' catálogos',
+        L.length===1&&princ.tipo?esc(princ.tipo):'meta efetiva '+fmtVal(t.metaEfetiva)+' peças/h','o',
+        L.length?L.map(k=>esc(k.numero||'sem catálogo')+' '+hDur(k.min)+' · '+nf(k.metaHora)+' peças/h').join(' | ')
+          :'nenhuma hora do período tem meta cadastrada'];
+    },
     primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
@@ -37,9 +48,12 @@ function cardsDe(A){
     semdados:()=>['semdados','Tempo sem dados',hDur(t.semDados),
       t.nLac+' lacuna'+(t.nLac===1?'':'s')+' no período',t.semDados>0?'w':'g',
       'não é parada: é ausência de registro e fica fora do denominador observado'],
+    /* A meta por hora vem do catálogo, não do cadastro da máquina: o rótulo
+       tem de mostrar a meta efetiva que realmente entrou na conta. */
     meta:()=>['meta','Meta proporcional',fmtVal(t.planMetaBase)+' peças',
       'atingimento '+fmtPct(t.atingBase),cl(t.atingBase),
-      nf(c.meta)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs],
+      fmtVal(t.metaEfetiva)+' peças/h × '+hDur(t.tempoBase)+' · base: '+bs
+      +((t.catalogos||[]).length>1?' · média ponderada de '+t.catalogos.length+' catálogos':'')],
     oee:()=>oeeCard('oee','OEE — '+bs,t.oeeBase,t.tempoBase,
       fmtVal(t.pcs)+' ÷ '+fmtVal(t.planCapBase)+' ('+nf(c.cap)+' peças/h × '+hDur(t.tempoBase)+')'
       +(t.base==='turno'?bonusTurno:'')),
@@ -217,8 +231,13 @@ function rastreabilidade(A){
       nf(t.incForaTurno)+' incrementos',nf(t.pcsForaTurno)+' peças'],
     ['Tempo entre marcações','última marcação − primeira marcação − abono',
       t.primeiroReg==null?NAO_CALC:dtBR(t.ultimoReg,'min')+' − '+dtBR(t.primeiroReg,'min'),hDur(t.marcacoes)],
-    ['Meta proporcional ('+bs+')','meta por hora × base ÷ 60',
-      nf(c.meta)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
+    ['Meta por hora (catálogo)',(t.catalogos||[]).length>1
+        ? 'média das metas horárias ponderada pelos minutos'
+        : 'meta do catálogo da hora',
+      (t.catalogos||[]).map(k=>esc(k.numero||'sem catálogo')+' '+nf(k.metaHora)+'×'+nf1(k.min)+'min').join(' + ')||NAO_CALC,
+      fmtVal(t.metaEfetiva)+' peças/h'],
+    ['Meta proporcional ('+bs+')','meta efetiva × base ÷ 60',
+      fmtVal(t.metaEfetiva)+' × '+nf1(t.tempoBase)+' ÷ 60',fmtVal(t.planMetaBase)+' peças'],
     ['Atingimento','peças ÷ meta proporcional',
       nf(t.pcs)+' ÷ '+fmtVal(t.planMetaBase),fmtPct(t.atingBase)],
     ['Planejado pela capacidade ('+bs+')','capacidade por hora × base ÷ 60',
@@ -382,7 +401,11 @@ function renderAnalise(){
   lg.style.cssText='display:flex;flex-wrap:wrap;gap:15px;font-size:13px;color:var(--tx2);margin-bottom:13px';
   lg.innerHTML=AS.map(A=>`<span><span class="swatch" style="background:${A.maq.cor};margin-right:6px"></span>${esc(A.maq.nome)}</span>`).join('')
     +(secaoAtiva('meta')?'<span><span style="display:inline-block;width:17px;border-top:2px dashed var(--meta);vertical-align:4px;margin-right:6px"></span>Meta</span>':'')
-    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'');
+    +(secaoAtiva('cap')?'<span><span style="display:inline-block;width:17px;border-top:2px solid var(--tx3);vertical-align:4px;margin-right:6px"></span>Capacidade</span>':'')
+    +(secaoAtiva('corMeta')?'<span style="margin-left:auto;display:flex;gap:11px;align-items:center">'
+      +'<span><span class="swatch" style="background:var(--ok);margin-right:5px"></span>bateu a meta</span>'
+      +'<span><span class="swatch" style="background:var(--warn);margin-right:5px"></span>85% ou mais</span>'
+      +'<span><span class="swatch" style="background:var(--bad);margin-right:5px"></span>abaixo de 85%</span></span>':'');
   const bx=el('div','cvbox');bx.innerHTML='<canvas id="ch" height="340"></canvas>';
   c2.append(lg,bx);s2.appendChild(c2);out.appendChild(s2);
 

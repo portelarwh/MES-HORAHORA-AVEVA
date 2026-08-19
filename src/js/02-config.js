@@ -18,6 +18,7 @@ const CARDS=[
   ['periodo','Período selecionado','Período',1],
   ['dados','Tempo com dados','Período',1],
   ['semdados','Tempo sem dados','Período',1],
+  ['catalogo','Catálogo do período','Produção',1],
   ['meta','Meta proporcional','Desempenho',1],
   ['oee','OEE da base escolhida','Desempenho',1],
   ['oeeprog','OEE programado','Desempenho',0],
@@ -40,7 +41,7 @@ const CARDS=[
 /* Seções da análise. [id, rótulo, padrão] */
 const OPCOES=[
   ['meta','Linha de meta',1],['cap','Linha de capacidade',1],['rot','Rótulos no gráfico',1],
-  ['acum','Acumulado',0],['turno','Fechamento por turno',1],['hora','Detalhe por hora',1],
+  ['corMeta','Colorir o gráfico por atingimento',1],['acum','Acumulado',0],['turno','Fechamento por turno',1],['hora','Detalhe por hora',1],
   ['cad','Cadência',1],['registros','Registros individuais',0],['qual','Qualidade dos dados',1],
   ['valid','Painel de validação',1],['dgn','Diagnóstico',1],['rastro','Rastreabilidade dos cálculos',1]
 ];

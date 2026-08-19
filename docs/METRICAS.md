@@ -8,7 +8,7 @@ refeitos na mão, estão em **[calculos.md](calculos.md)**.
 | Indicador | Fórmula | Observação |
 | --- | --- | --- |
 | Produção | incrementos × peças por incremento | o contador indica a próxima unidade: leitura − início da contagem |
-| Meta proporcional | meta (peças/h) × base ÷ 60 | acompanha a base escolhida |
+| Meta proporcional | meta efetiva (peças/h) × base ÷ 60 | a meta efetiva vem do catálogo da hora |
 | Atingimento | peças ÷ meta proporcional | “—” quando a meta não está cadastrada |
 | OEE | peças ÷ (capacidade × base ÷ 60) | quatro leituras, uma por base |
 | Disponibilidade | tempo rodando ÷ tempo observado | |
@@ -29,6 +29,13 @@ Todo indicador que divide por tempo declara **contra o que** foi medido:
 | Janela com dados | tempo com dados − abono | quanto entregou enquanto era observada |
 | Tempo rodando | observado − paradas | quanto entregou enquanto de fato rodava |
 | Até o último registro | última marcação − início do período | como está indo até agora |
+
+## Catálogos
+
+A meta por hora vem do catálogo programado para ela; sem programação, do catálogo
+padrão da máquina; sem catálogo, da meta cadastrada na própria máquina. Quando o
+recorte atravessa catálogos diferentes, a meta é a média das metas horárias
+ponderada pelos minutos.
 
 ## A primeira marcação é referência
 

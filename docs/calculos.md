@@ -198,15 +198,61 @@ novo contaria duas vezes. Ela aparece separada.
 
 ---
 
-## 4. Meta proporcional
+## 4. Meta proporcional e catálogo
+
+A meta por hora vem do **catálogo** — o produto que a linha estava rodando
+naquela hora. Cadeia de fallback, do mais específico para o mais geral:
+
+| Ordem | Origem da meta |
+| --- | --- |
+| 1 | catálogo programado para aquela hora de relógio |
+| 2 | catálogo padrão da máquina |
+| 3 | meta cadastrada na própria máquina |
+
+Sem nenhum catálogo cadastrado, a apuração é idêntica à das versões anteriores.
+
+### Meta efetiva de um recorte
+
+Quando o recorte atravessa horas com catálogos diferentes, a meta é a **média
+das metas horárias ponderada pelos minutos** que o recorte ocupa em cada hora:
 
 ```
-meta do período = meta (peças/h) × base (min) ÷ 60
+meta efetiva    = Σ ( meta da hora × minutos naquela hora ) ÷ Σ minutos
+meta do período = meta efetiva (peças/h) × base (min) ÷ 60
 atingimento     = peças ÷ meta do período
 ```
 
+**Exemplo verificável.** Período das 06:00 às 14:00, sete horas no CAT-A
+(60.000 peças/h) e uma hora no CAT-B (90.000 peças/h):
+
+```
+meta efetiva = (60.000 × 420 + 90.000 × 60) ÷ 480 = 63.750 peças/h
+meta do período = 63.750 × 480 ÷ 60 = 510.000 peças
+```
+
+Uma hora isolada usa a meta do seu próprio catálogo, sem média: a hora do CAT-B
+é cobrada por 90.000 e as do CAT-A por 60.000. É por isso que duas horas com a
+mesma produção podem ter atingimentos diferentes.
+
+Horas cujo catálogo tem meta zero ou ausente ficam **fora** da média — não
+puxam a meta efetiva para baixo, apenas não contribuem.
+
 A meta acompanha a base escolhida, então períodos parciais são comparáveis sem
 ajuste manual. Meia hora de análise cobra meia hora de meta.
+
+### Acumulado
+
+A tabela de detalhe por hora traz, além da hora isolada, o **acumulado do
+período**: peças acumuladas, planejado acumulado (soma das metas horárias),
+saldo e atingimento acumulado. A soma das metas horárias fecha exatamente com a
+meta do período — é a mesma conta aplicada a recortes diferentes.
+
+### Troca de catálogo no meio do processo
+
+No painel de análise, o seletor **Catálogo** aplica um catálogo a todas as horas
+do período, nas máquinas selecionadas. Para uma troca no meio do turno, a coluna
+**Catálogo** da tabela de detalhe por hora edita uma hora só. A programação fica
+gravada no IndexedDB, por máquina e por dia, e sobrevive ao recarregamento.
 
 **Exemplo.** Máquina com meta de 90.000 peças/h, período das 06:00 às 07:00,
 sem abono, base “período selecionado”:

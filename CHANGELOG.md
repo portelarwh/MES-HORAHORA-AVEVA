@@ -3,6 +3,41 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [5.0.0] — 2026-08-18
+
+### Adicionado
+- **Aba Catálogos.** Cada catálogo é um produto com número, tipo e meta própria
+  em peças por hora.
+- **Meta por hora, vinda do catálogo.** A meta de uma hora é a do catálogo
+  programado para ela; sem programação vale o catálogo padrão da máquina; sem
+  catálogo padrão, a meta cadastrada na própria máquina. Sem nenhum catálogo, a
+  apuração é idêntica à das versões anteriores.
+- **Programação por hora.** No painel de análise, o seletor de catálogo aplica um
+  catálogo a todas as horas do período; a coluna Catálogo da tabela de detalhe
+  por hora edita uma hora só, para registrar troca no meio do processo. A
+  programação fica gravada no IndexedDB, por máquina e por dia.
+- **Meta ponderada.** Quando o recorte atravessa catálogos diferentes, a meta é a
+  média das metas horárias ponderada pelos minutos. O cartão e a rastreabilidade
+  mostram a composição.
+- **Colunas de acumulado** na tabela por hora: peças acumuladas, planejado
+  acumulado, saldo e atingimento acumulado.
+- **Gráfico colorido por atingimento**: verde bateu a meta da hora, âmbar 85% ou
+  mais, vermelho abaixo. Vale para barras e para os pontos da linha, e com mais
+  de uma máquina a identidade fica no contorno. A linha de meta virou um degrau,
+  já que a meta pode mudar de hora para hora.
+- Catálogo, meta efetiva e as colunas de acumulado nos CSV, no relatório e no
+  texto de e-mail.
+
+### Alterado
+- **IndexedDB migrado da versão 1 para a 2.** Migração puramente aditiva: cria
+  os stores `catalogos` e `programacao` sem tocar em nenhum store existente,
+  keyPath ou registro. Base e backups anteriores continuam sendo lidos.
+- O cartão de meta passou a rotular com a **meta efetiva** do catálogo em vez da
+  meta cadastrada na máquina — a conta já usava a do catálogo, só o rótulo
+  estava desatualizado.
+- O rótulo da linha de meta no gráfico foi para a direita, para não colidir com
+  o da capacidade quando os dois valores coincidem.
+
 ## [4.3.0] — 2026-08-18
 
 ### Adicionado

@@ -14,6 +14,7 @@ async function montarDados(){
     if(r.data<o.min)o.min=r.data;if(r.data>o.max)o.max=r.data;}
   $('db_kpis').innerHTML=[
     ['Máquinas',nf(MAQ.length),'cadastradas','c'],['Turnos',nf(TUR.length),'cadastrados','c'],
+    ['Catálogos',nf(CAT.length),'cadastrados','o'],
     ['Dias com dados',nf(all.length),'somando todas as máquinas','o'],
     ['Registros guardados',nf(pts),'pontos do contador','o']
   ].map(([k,v,u,x])=>`<div class="kpi ${x}"><div class="k"><span class="dot"></span>${k}</div><div class="v">${v}</div><div class="u">${u}</div></div>`).join('');
@@ -27,9 +28,11 @@ async function montarDados(){
   $('db_tbl').innerHTML=b+'</tbody>';
 }
 $('db_exp').addEventListener('click',async()=>{
-  const bk={versao:4,dbVersao:DB_VER,exportado:new Date().toISOString(),
+  const bk={versao:5,dbVersao:DB_VER,exportado:new Date().toISOString(),
     maquinas:await getAll('maquinas'),turnos:await getAll('turnos'),
-    ajustes:await getAll('ajustes'),dias:await getAll('dias'),prefs:PREFS};
+    ajustes:await getAll('ajustes'),catalogos:await getAll('catalogos'),
+    programacao:await getAll('programacao'),
+    dias:await getAll('dias'),prefs:PREFS};
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([JSON.stringify(bk)],{type:'application/json'}));
   a.download='backup-monitor-hh-'+iso(new Date())+'.json';a.click();toast('Backup gerado')});
@@ -43,6 +46,12 @@ $('db_file').addEventListener('change',e=>{
       for(const m of bk.maquinas||[])await put('maquinas',normaliza(m));
       for(const t of bk.turnos||[])await put('turnos',t);
       for(const j of bk.ajustes||[])await put('ajustes',j);
+      for(const k of bk.catalogos||[])await put('catalogos',k);
+      /* mescla por hora: restaurar não apaga programação de horas ausentes no backup */
+      for(const g of bk.programacao||[]){
+        const ex=await get1('programacao',g.chave);
+        await put('programacao',{...g,horas:{...((ex&&ex.horas)||{}),...(g.horas||{})}});
+      }
       for(const d of bk.dias||[]){
         const ex=await get1('dias',d.chave);
         if(ex){const mp=new Map(ex.pts.map(p=>[p[0],p[1]]));for(const p of d.pts)mp.set(p[0],p[1]);
@@ -50,7 +59,7 @@ $('db_file').addEventListener('change',e=>{
         await put('dias',d);
       }
       if(bk.prefs){PREFS=mesclaPrefs(prefsPadrao(),bk.prefs);salvarPrefs();aplicarPrefsNaTela()}
-      await recarregar();montarMaquinas();montarTurnos();montarDia();montarAnalise();montarDados();
+      await recarregar();montarMaquinas();montarTurnos();montarDia();montarCatalogos();montarAnalise();montarDados();
       toast('Backup restaurado e mesclado'+(bk.prefs?' — preferências incluídas':''));
     }catch(x){console.error('[monitor] backup inválido',x);toast('Arquivo de backup inválido')}
   };
@@ -58,7 +67,7 @@ $('db_file').addEventListener('change',e=>{
 /* Apagar a base é diferente de limpar o relatório: aquele botão, na aba
    Análise, só limpa a tela. Este remove os registros importados. */
 $('db_del').addEventListener('click',async()=>{
-  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
+  if(!confirm('Apagar todos os registros de produção do IndexedDB?\n\nMáquinas, turnos, catálogos, programação, lançamentos e preferências são mantidos. Isso não pode ser desfeito.'))return;
   await clearS('dias');await montarDados();
   $('a_out').innerHTML='';$('a_vazio').style.display='block';$('relbox').classList.remove('on');LAST=null;
   toast('Registros de produção apagados')});

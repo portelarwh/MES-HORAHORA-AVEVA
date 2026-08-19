@@ -56,27 +56,43 @@ function linhasRegistros(A,L){
 const CAB_REG='<thead><tr><th>Data e hora do registro</th><th>Contador</th><th>Δ</th><th>Peças</th>'
   +'<th>Intervalo</th><th>Classificação</th><th>Contabilizado</th></tr></thead>';
 
-/* --- detalhe por hora ---------------------------------------------------- */
+/* --- detalhe por hora ----------------------------------------------------
+   Além da hora isolada, a tabela carrega o acumulado do período: peças
+   acumuladas contra meta acumulada. É a leitura que diz se a linha está
+   recuperando ou afundando ao longo do turno, coisa que a coluna da hora
+   sozinha não mostra. */
 function tabelaHoras(A,linhas){
   const c=A.maq,u=c.modo==='unidade'?'Inc.':esc(c.unid[0].toUpperCase()+c.unid.slice(1))+'s';
   let h='<thead><tr>'
-    +'<th rowspan="2">Hora</th><th rowspan="2">Regs</th>'
+    +'<th rowspan="2">Hora</th><th rowspan="2">Catálogo</th><th rowspan="2">Regs</th>'
     +'<th class="grp" colspan="3">Produção</th>'
-    +'<th class="grp" colspan="2">Desempenho</th>'
+    +'<th class="grp" colspan="4">Acumulado no período</th>'
+    +'<th class="grp" colspan="2">Desempenho da hora</th>'
     +'<th class="grp" colspan="4">Tempo (min)</th>'
     +'<th class="grp" colspan="2">Cadência</th></tr><tr>'
     +`<th class="sep">${u}</th><th>Peças</th><th>vs anterior</th>`
+    +'<th class="sep">Peças</th><th>Planejado</th><th>Saldo</th><th>Atingimento</th>'
     +'<th class="sep">Meta</th><th>OEE</th>'
     +'<th class="sep">Com dados</th><th>Sem dados</th><th>Parado</th><th>Abono</th>'
     +'<th class="sep">Ritmo/h</th><th>Interv. (s)</th></tr></thead><tbody>';
-  let ant=null;
+  let ant=null,acPcs=0,acMeta=0;
   for(const l of linhas){
     const rot=(l.bk.dia?l.bk.dia+' ':'')+l.bk.rot
       +(l.bk.parcial?` <span class="tag">${hhmm(new Date(l.a))}–${hhmm(new Date(l.b))}</span>`:'');
+    acPcs+=l.pcs;
+    if(l.planMetaBase!=null)acMeta+=l.planMetaBase;
+    const saldo=acMeta>0?acPcs-acMeta:null;
+    const cat=l.catalogos&&l.catalogos.length?l.catalogos[0]:null;
     h+=`<tr class="exp" data-a="${l.a}" data-b="${l.b}" tabindex="0" role="button" aria-expanded="false">`
-      +`<td><span class="cx">▸</span> ${rot}</td><td>${nf(l.regs)}</td>`
+      +`<td><span class="cx">▸</span> ${rot}</td>`
+      +`<td class="cat" style="text-align:left"><select class="selCat" data-hora="${l.a}" title="Catálogo desta hora">`
+      +optsCatalogo(cat?cat.catalogoId:'')+`</select></td>`
+      +`<td>${nf(l.regs)}</td>`
       +`<td class="sep">${nf(l.inc)}</td><td>${nf(l.pcs)}</td>`
       +`<td>${seta(l.pcs,ant)}</td>`
+      +`<td class="sep">${nf(acPcs)}</td><td>${acMeta>0?nf(acMeta):NAO_CALC}</td>`
+      +`<td>${saldo==null?NAO_CALC:`<span class="arw ${saldo>=0?'up':'dn'}">${saldo>=0?'+':''}${nf(saldo)}</span>`}</td>`
+      +`<td>${pill(razao(acPcs,acMeta))}</td>`
       +`<td class="sep">${pill(l.atingBase)}</td><td>${pill(l.oeeBase,.85)}</td>`
       +`<td class="sep">${nf1(l.comDados)}</td><td>${l.semDados>0?nf1(l.semDados):'—'}</td>`
       +`<td>${l.parado>0?nf1(l.parado):'—'}</td><td>${l.abono>0?nf1(l.abono):'—'}</td>`
@@ -84,8 +100,11 @@ function tabelaHoras(A,linhas){
     ant=l.pcs;
   }
   const t=A.tot;
-  return h+`</tbody><tfoot><tr><td>Total do período</td><td>${nf(t.regs)}</td>`
+  return h+`</tbody><tfoot><tr><td>Total do período</td><td></td><td>${nf(t.regs)}</td>`
     +`<td class="sep">${nf(t.inc)}</td><td>${nf(t.pcs)}</td><td>${NAO_CALC}</td>`
+    +`<td class="sep">${nf(t.pcs)}</td><td>${fmtVal(t.planMetaBase)}</td>`
+    +`<td>${t.planMetaBase==null?NAO_CALC:(t.pcs-t.planMetaBase>=0?'+':'')+nf(t.pcs-t.planMetaBase)}</td>`
+    +`<td>${fmtPct(t.atingBase)}</td>`
     +`<td class="sep">${fmtPct(t.atingBase)}</td><td>${fmtPct(t.oeeBase)}</td>`
     +`<td class="sep">${nf1(t.comDados)}</td><td>${nf1(t.semDados)}</td>`
     +`<td>${nf1(t.parado)}</td><td>${nf1(t.abono)}</td>`
@@ -95,8 +114,13 @@ function tabelaHoras(A,linhas){
 /* Expansão: mostra apenas os registros dentro da janela daquela linha. */
 function ligarExpansao(tbl,A){
   tbl.addEventListener('click',e=>{
+    if(e.target.closest('.selCat'))return;          // o seletor de catálogo não expande a linha
     const tr=e.target.closest('tr.exp');if(!tr||!tbl.contains(tr))return;
     alternarExpansao(tr,A);
+  });
+  tbl.addEventListener('change',e=>{
+    const sel=e.target.closest('.selCat');if(!sel)return;
+    definirCatalogoDaHora(A.maq.id,+sel.dataset.hora,sel.value);
   });
   tbl.addEventListener('keydown',e=>{
     if(e.key!=='Enter'&&e.key!==' ')return;
@@ -153,7 +177,8 @@ function secaoHoras(out){
   for(const A of LAST.AS){
     const s=secao(`<span class="swatch" style="background:${A.maq.cor}"></span>Detalhe por hora — ${esc(A.maq.nome)}`,
       'Clique em uma linha para ver os registros individuais daquela hora. '
-      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela.',
+      +'A primeira e a última linha podem ser frações de hora, quando o filtro começa ou termina no meio dela. '
+      +'A coluna <b>Catálogo</b> troca a meta daquela hora — use para registrar uma troca de produto no meio do processo.',
       'horas:'+A.maq.id);
     const w=el('div','tblwrap'),tbl=el('table');
     w.appendChild(tbl);s.appendChild(w);

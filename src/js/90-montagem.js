@@ -83,6 +83,8 @@ $('a_contagem').addEventListener('change',ajudaCalculo);
   .forEach(id=>$(id).addEventListener('change',()=>{guardarFiltros();if(LAST)rodarAnalise()}));
 document.querySelectorAll('#a_rapidos button[data-rap]')
   .forEach(b=>b.addEventListener('click',()=>aplicarRapido(b.dataset.rap)));
+$('a_cat_todas').addEventListener('click',()=>aplicarCatalogoNoPeriodo($('a_cat').value));
+$('a_cat_limpar').addEventListener('click',limparProgramacaoDoPeriodo);
 $('a_auto').addEventListener('change',e=>{
   if(e.target.checked)ligarAuto();
   else{pararAuto();PREFS.auto=false;salvarPrefs();$('a_autoinfo').textContent='Atualização automática desligada.'}
