@@ -36,11 +36,14 @@ function cardsDe(A){
         L.length?L.map(k=>esc(k.numero||'sem catálogo')+' '+hDur(k.min)+' · '+nf(k.metaHora)+' peças/h').join(' | ')
           :'nenhuma hora do período tem meta cadastrada'];
     },
-    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg),
+    /* No cartão o carimbo vai até o segundo: os milissegundos que o historian
+       grava só interessam na lista de registros, onde se confere marcação a
+       marcação. */
+    primeiro:()=>['primeiro','Primeira marcação',t.primeiroReg==null?NAO_CALC:dtBR(t.primeiroReg,'s'),
       'primeiro registro dentro do período','o',
       t.primeiroReg==null?'nenhum registro na janela'
         :'começou '+hDur((t.primeiroReg-t.a)/60000)+' depois do início do período'],
-    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg),
+    ultimo:()=>['ultimo','Última marcação',t.ultimoReg==null?NAO_CALC:dtBR(t.ultimoReg,'s'),
       'último registro dentro do período','o',
       t.ultimoReg==null?'nenhum registro na janela'
         :'faltam '+hDur((t.b-t.ultimoReg)/60000)+' para o fim do período'],
@@ -140,6 +143,14 @@ function cardsHTML(A){
    critério escolhido e com a meta de OEE vigente no período. */
 function legendaCores(){
   const t=LAST.AS[0]?LAST.AS[0].tot:null;
+  if(PREFS.corPor==='catalogo'){
+    const K=(t&&t.catalogos)||[];
+    return '<span style="margin-left:auto;display:flex;gap:11px;align-items:center;flex-wrap:wrap">'
+      +'<span style="color:var(--tx3)">catálogo da hora</span>'
+      +(K.length?K.map(k=>`<span><span class="swatch" style="background:${k.cor||'var(--tx3)'};margin-right:5px"></span>${esc(k.numero||'sem catálogo')}</span>`).join('')
+        :'<span style="color:var(--tx3)">nenhum catálogo no período</span>')
+      +'</span>';
+  }
   const porOee=PREFS.corPor==='oee';
   const alvoTxt=porOee?(t&&t.alvoOee!=null?fmtPct(t.alvoOee):'sem meta'):'a meta de peças';
   const atenTxt=porOee?(t&&t.atencaoOee!=null?fmtPct(t.atencaoOee):'—'):'85%';

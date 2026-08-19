@@ -96,7 +96,7 @@ function mesclaPrefs(base,salvo){
   for(const k of Object.keys(out.secoes))if(!OPCOES.some(c=>c[0]===k))delete out.secoes[k];
   if(!BASES.some(b=>b[0]===out.base))out.base=base.base;
   if(!CONTAGENS.some(c=>c[0]===out.contagem))out.contagem=base.contagem;
-  if(out.corPor!=='oee'&&out.corPor!=='meta')out.corPor=base.corPor;
+  if(!['oee','meta','catalogo'].includes(out.corPor))out.corPor=base.corPor;
   if(!(out.limParada>0))out.limParada=base.limParada;
   if(!(out.limSemDados>0))out.limSemDados=base.limSemDados;
   if(!(out.autoSeg>=30))out.autoSeg=base.autoSeg;

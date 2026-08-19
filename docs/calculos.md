@@ -57,6 +57,13 @@ A série **não é quebrada na meia-noite**. Um incremento entre 23h59 e 00h01 �
 contado normalmente; o dia é apenas a chave de armazenamento, não um critério de
 cálculo.
 
+### Precisão do carimbo na tela
+
+Os cartões de primeira e última marcação mostram até o **segundo**. Os
+milissegundos que o historian grava aparecem na **lista de registros
+individuais** e nos CSV, onde se confere marcação a marcação — no cartão eles
+só poluem a leitura.
+
 ### Nada de horário inventado
 
 Um `delta` de 5 é **um** registro, no instante em que o historian o gravou — não
@@ -285,9 +292,20 @@ de referência não é ruim — é apenas um número sem contra o que ser compar
 
 O limite de atenção é cadastrado junto da meta; em branco, assume 90% dela.
 
-O gráfico tem um seletor de critério: **OEE contra a meta da família** (padrão) ou
-**atingimento da meta de peças**. A legenda declara sempre contra o que as cores
-estão medindo, com o valor da meta vigente.
+O gráfico tem um seletor de critério:
+
+| Critério | Cor da coluna |
+| --- | --- |
+| **OEE contra a meta da família** (padrão) | verde, âmbar ou vermelho pela meta vigente |
+| **Atingimento da meta de peças** | verde, âmbar ou vermelho pela meta do catálogo |
+| **Cor do catálogo** | a cor cadastrada no catálogo — mostra qual produto rodou em cada hora |
+
+A legenda declara sempre contra o que as cores estão medindo, com o valor da meta
+vigente; no critério por catálogo, lista os catálogos do período com as suas cores.
+
+Cada coluna traz **dois números**: a produção **acima** dela e o **OEE dentro**
+dela. São leituras diferentes — quantidade e eficiência — e ficam lado a lado sem
+precisar trocar de gráfico.
 
 ### Acumulado
 

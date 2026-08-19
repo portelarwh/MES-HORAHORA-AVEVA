@@ -30,9 +30,9 @@ Esta ferramenta faz essa ponte com o critério explícito e visível na tela.
 | Filtros rápidos | Turno atual, hoje, ontem, últimas 24 h, últimos 7 dias, este mês. |
 | Base de máquinas | Cada máquina define o que um incremento representa (1 peça ou lote de X), capacidade, meta e o catálogo padrão. |
 | Famílias e meta de OEE | Cada catálogo pertence a uma família, e é na família que mora a meta de OEE — cadastrada **por vigência**, porque a meta muda de tempos em tempos. Mudar a data da análise faz as cores de cartões, tabelas e barras acompanharem a meta que valia naquela data. |
-| Catálogos | Cada produto tem número, tipo, família e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
+| Catálogos | Cada produto tem número, tipo, família, **cor** e a sua meta em peças por hora. A meta de uma hora é a do catálogo programado para ela — dá para aplicar um catálogo ao período inteiro ou trocar hora a hora, para registrar uma troca no meio do processo. |
 | Acumulado | A tabela por hora mostra peças acumuladas, planejado acumulado, saldo e atingimento acumulado, além do desempenho da hora isolada. |
-| Gráfico por atingimento | Cada hora é colorida por ter batido ou não a meta daquela hora: verde bateu, âmbar 85% ou mais, vermelho abaixo. |
+| Gráfico | Cada coluna mostra a produção acima e o OEE dentro dela. A cor segue o critério escolhido: OEE contra a meta da família, atingimento da meta de peças, ou a cor cadastrada no catálogo — útil quando cada tampa tem a sua cor. |
 | Turnos | Aceitam virada de meia-noite, são recortados na janela e nunca se sobrepõem. Seletor decide se um turno é desconsiderado e anexado ao seguinte. |
 | Meta proporcional | A meta acompanha a base escolhida. Por padrão a base vai da primeira à última marcação do contador — a linha começa a produzir quando a primeira caixa é contada, não quando o relógio do filtro vira. |
 | OEE em seis leituras | Entre marcações (padrão), turno cadastrado, programado, observado, operacional e parcial — com a base sempre declarada junto do número. |

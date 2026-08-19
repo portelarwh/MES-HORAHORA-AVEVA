@@ -89,6 +89,7 @@ function horasDaJanela(ini,fim,metaHoras,padrao){
     out.push({a:t,b:t+3600000,
       metaHora:info?num(info.metaHora):null,
       catalogoId:info?info.catalogoId:null,numero:info?info.numero:null,tipo:info?info.tipo:null,
+      cor:info?info.cor:null,
       familiaId:info?info.familiaId:null,familia:info?info.familia:null,
       alvoOee:info?num(info.alvoOee):null,atencaoOee:info?num(info.atencaoOee):null,
       vigencia:info?info.vigencia:null});
@@ -120,7 +121,7 @@ function metaDoRecorte(horas,a,b){
     peso+=m*h.metaHora;
     const k=h.catalogoId||'_';
     const u=usados.get(k)||{catalogoId:h.catalogoId,numero:h.numero,tipo:h.tipo,
-      familia:h.familia,metaHora:h.metaHora,min:0};
+      cor:h.cor,familia:h.familia,metaHora:h.metaHora,min:0};
     u.min+=m;usados.set(k,u);
   }
   const comMeta=min-semMeta;

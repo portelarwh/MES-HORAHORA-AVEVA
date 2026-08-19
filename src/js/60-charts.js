@@ -27,7 +27,15 @@ function grafico(cv,forcaW,forcaH){
   const classeDe=l=>PREFS.corPor==='oee'
     ? clAlvo(l.oeeBase,l.alvoOee,l.atencaoOee)   // meta de OEE vigente da família
     : cl(l.atingBase);                           // atingimento da meta de peças
-  const corDe=(A,i)=>porMeta?COR[classeDe(A.linhas[i])]:A.maq.cor;
+  const corDe=(A,i)=>{
+    const l=A.linhas[i];
+    if(!porMeta)return A.maq.cor;
+    if(PREFS.corPor==='catalogo'){                // a cor cadastrada na tampa
+      const k=(l.catalogos||[])[0];
+      return k&&k.cor?k.cor:T.tx3;
+    }
+    return COR[classeDe(l)];
+  };
   const idx=B.map((_,i)=>i).filter(i=>AS.some(A=>A.linhas[i].comDados>0||A.linhas[i].pcs>0));
   if(!idx.length){x.fillStyle=T.tx3;x.textAlign='center';x.font='14px Inter,sans-serif';
     x.fillText('Sem registro do contador no período selecionado',w/2,h/2);return}
@@ -55,6 +63,15 @@ function grafico(cv,forcaW,forcaH){
       x.fillStyle=corDe(A,idx[j]);x.beginPath();
       if(x.roundRect)x.roundRect(cx,y,bwid,hh,[4,4,0,0]);else x.rect(cx,y,bwid,hh);x.fill();
       if(porMeta&&AS.length>1){x.strokeStyle=A.maq.cor;x.lineWidth=1.6;x.stroke()}
+      /* OEE dentro da coluna; a produção continua em cima dela. */
+      if(rot&&AS.length<=2&&bwid>(forcaW?24:30)&&hh>(forcaW?18:24)){
+        const oeeTxt=fmtPct(A.linhas[idx[j]].oeeBase,0);
+        if(oeeTxt!==NAO_CALC){
+          x.fillStyle='#fff';x.textAlign='center';
+          x.font='700 '+(forcaW?8:11)+'px "IBM Plex Mono",monospace';
+          x.fillText(oeeTxt,cx+bwid/2,y+(forcaW?9:12));
+        }
+      }
       if(rot&&AS.length<=2&&bw>(forcaW?26:30)){x.fillStyle=T.tx;x.textAlign='center';
         x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
         x.fillText(v>=1000?nf(v/1000)+'k':nf(v),cx+bwid/2,y-8)}
@@ -97,11 +114,19 @@ function grafico(cv,forcaW,forcaH){
     });
     if(desenhou)x.stroke();
     x.setLineDash([]);
-    /* rótulo à direita para nunca colidir com o da capacidade, que fica à esquerda */
+    /* Rótulo à direita, para não colidir com o da capacidade, que fica à
+       esquerda; com um fundo atrás, porque uma coluna alta pode passar ali. */
     const ref=metas.find(v=>v!=null&&isFinite(v));
     if(ref!=null){
-      x.fillStyle=T.meta;x.textAlign='right';x.font='600 '+(forcaW?8:10.5)+'px "IBM Plex Mono",monospace';
-      x.fillText('meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref)),w-pad.r-5,Y(ref)-8);
+      const txt='meta '+(ref>=1000?nf(ref/1000)+'k':nf(ref));
+      const fs=forcaW?8:10.5;
+      x.font='600 '+fs+'px "IBM Plex Mono",monospace';
+      const tw=x.measureText(txt).width,bx=w-pad.r-5-tw-4,by=Y(ref)-8-fs;
+      x.fillStyle=T.card;x.globalAlpha=.88;
+      if(x.roundRect){x.beginPath();x.roundRect(bx,by,tw+8,fs+6,3);x.fill()}
+      else x.fillRect(bx,by,tw+8,fs+6);
+      x.globalAlpha=1;
+      x.fillStyle=T.meta;x.textAlign='right';x.fillText(txt,w-pad.r-5,Y(ref)-8);
     }
   }
 }

@@ -3,6 +3,24 @@
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento segue [SemVer](https://semver.org/lang/pt-BR/).
 
+## [5.2.0] — 2026-08-18
+
+### Adicionado
+- **Cor por catálogo.** O cadastro do catálogo ganhou um seletor de cor, para
+  espelhar a cor da tampa de cada produto. A cor aparece na lista de catálogos,
+  ao lado do seletor de cada hora na tabela de detalhe, e como terceiro critério
+  do seletor **Colorir o gráfico por**, que passa a oferecer: OEE contra a meta
+  da família, atingimento da meta de peças, ou cor do catálogo.
+- **OEE dentro da coluna** do gráfico de barras. A produção continua acima da
+  coluna: quantidade em cima, eficiência dentro, sem trocar de gráfico.
+
+### Alterado
+- Os cartões de **primeira e última marcação** passam a mostrar até o segundo. Os
+  milissegundos continuam na lista de registros individuais e nos CSV, onde se
+  confere marcação a marcação.
+- O rótulo da linha de meta no gráfico ganhou um fundo, para continuar legível
+  quando uma coluna alta passa por baixo dele.
+
 ## [5.1.0] — 2026-08-18
 
 ### Adicionado
